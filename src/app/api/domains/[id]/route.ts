@@ -26,6 +26,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const plan = planFor(user.subscription);
   const cutoff = Date.now() - plan.historyDays * 24 * 3600 * 1000;
 
+  // Unfiltered facts about stored rows — lets the UI explain "stored but not
+  // in window" instead of showing a misleading empty state.
+  const totalRows = domain.reports.length;
+  const latestRowAt = domain.reports[0]?.seenAt ?? null;
+
   // Aggregate in the same shape the analyzer produces, so the UI components are shared.
   const byKey = new Map<string, { sourceIp: string; count: number; spfPass: number; spfFail: number; dkimPass: number; dkimFail: number; headerFrom: string; orgs: Set<string>; last: number; dmarcPass: boolean }>();
   const orgVolume = new Map<string, number>();
@@ -67,6 +72,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   return NextResponse.json({
     domain: { id: domain.id, name: domain.name, policy: domain.policy, mailboxToken: domain.mailboxToken },
     plan: { historyDays: plan.historyDays, csvExport: plan.csvExport },
+    storage: { totalRows, latestRowAt: latestRowAt ? latestRowAt.toISOString() : null },
     summary: {
       volume,
       dmarcPassVolume: passVolume,

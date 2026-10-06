@@ -40,11 +40,40 @@ export interface Analysis {
   healthReason: string;
 }
 
-function suspicionFor(row: { volume: number; dmarc: "pass" | "fail"; headerFrom: string; publishedDomain: string | null }): {
+function suspicionFor(row: {
+  volume: number;
+  dmarc: "pass" | "fail";
+  spf: SourceRow["spf"];
+  dkim: SourceRow["dkim"];
+  headerFrom: string;
+  publishedDomain: string | null;
+}): {
   suspicion: SourceRow["suspicion"];
   note: string;
 } {
-  if (row.dmarc === "pass") return { suspicion: "none", note: "Authenticated as your domain." };
+  if (row.dmarc === "pass") {
+    // Guided-compliance notes: passing is not the same as healthy. Explain
+    // which mechanism carried the mail and what to harden next.
+    if (row.dkim === "fail") {
+      return {
+        suspicion: "none",
+        note: "Authenticated via SPF only — DKIM failed here. Mail still passes DMARC, but fixing DKIM for this sender protects you if SPF breaks (forwarding, mailing lists).",
+      };
+    }
+    if (row.spf === "fail") {
+      return {
+        suspicion: "none",
+        note: "Authenticated via DKIM only — SPF failed here. Usually harmless (forwarding rewrites envelopes); adding this sender to your SPF record makes delivery resilient.",
+      };
+    }
+    if (row.spf === "mixed" || row.dkim === "mixed") {
+      return {
+        suspicion: "none",
+        note: "Passes DMARC, but authentication varies between messages — worth checking whether every service on this IP signs consistently.",
+      };
+    }
+    return { suspicion: "none", note: "Fully authenticated (SPF and DKIM aligned) — nothing to do here." };
+  }
   const fromMatches =
     row.publishedDomain && row.headerFrom.endsWith(row.publishedDomain);
   if (!fromMatches && row.headerFrom) {
@@ -130,6 +159,8 @@ export function analyzeReports(
     const { suspicion, note } = suspicionFor({
       volume: s.volume,
       dmarc: s.dmarc,
+      spf: s.spf,
+      dkim: s.dkim,
       headerFrom: s.headerFrom,
       publishedDomain,
     });

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed — Guided analysis notes (start of the differentiator)
+- "What this means" per source no longer says one line for every passing
+  source. Passing sources now explain WHICH mechanism carried the mail and
+  what to harden next: SPF-only (fix DKIM), DKIM-only (add sender to SPF),
+  mixed (check signing consistency), or fully aligned.
+- Domain detail explains "stored but outside window": reports older than the
+  plan's history window are announced with their count and latest date
+  instead of a misleading empty state (found during the screenshot audit).
+- Dashboard pluralization fix ("1 stored report row").
+
 ### Changed — Ingestion Ledger (no more silent failures)
 - **Every ingestion attempt now writes a durable `IngestionEvent`**: status
   (processed / partial / rejected), files received, reports parsed, records

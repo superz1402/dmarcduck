@@ -24,6 +24,7 @@ interface SourceRow {
 interface Detail {
   domain: { id: string; name: string; policy: string; mailboxToken: string };
   plan: { historyDays: number; csvExport: boolean };
+  storage?: { totalRows: number; latestRowAt: string | null };
   summary: {
     volume: number;
     dmarcPassVolume: number;
@@ -163,15 +164,27 @@ export function DomainDetail({ domainId }: { domainId: string }) {
         <CardContent className="p-0 pb-2">
           {data.sources.length === 0 ? (
             <div className="p-6">
-              <EmptyState
-                title="No reports stored yet"
-                body="Point your domain's DMARC rua tag at the ingestion URL (the copy button above) and reports will start landing within 24 hours — providers typically send daily."
-                action={
-                  <Link href="/docs/ingestion">
-                    <Button variant="outline" size="sm">Ingestion docs</Button>
-                  </Link>
-                }
-              />
+              {data.storage && data.storage.totalRows > 0 ? (
+                <EmptyState
+                  title="Reports are stored — just outside this window"
+                  body={`${data.storage.totalRows.toLocaleString()} report ${data.storage.totalRows === 1 ? "row" : "rows"} stored. The latest arrived ${data.storage.latestRowAt ? new Date(data.storage.latestRowAt).toLocaleDateString() : "recently"}, which is older than your plan's ${data.plan.historyDays}-day window — so the stats above show nothing yet. New reports will appear here as providers send them.`}
+                  action={
+                    <Link href="/docs/ingestion">
+                      <Button variant="outline" size="sm">Ingestion docs</Button>
+                    </Link>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="No reports stored yet"
+                  body="Point your domain's DMARC rua tag at the ingestion URL (the copy button above) and reports will start landing within 24 hours — providers typically send daily."
+                  action={
+                    <Link href="/docs/ingestion">
+                      <Button variant="outline" size="sm">Ingestion docs</Button>
+                    </Link>
+                  }
+                />
+              )}
             </div>
           ) : (
             <div className="scroll-slim max-h-96 overflow-y-auto">

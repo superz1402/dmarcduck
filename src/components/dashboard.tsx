@@ -148,7 +148,7 @@ export function Dashboard({ userEmail }: { userEmail: string }) {
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    <span className="tnum">{d.reportCount.toLocaleString()}</span> stored report rows
+                    <span className="tnum">{d.reportCount.toLocaleString()}</span> stored report {d.reportCount === 1 ? "row" : "rows"}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
