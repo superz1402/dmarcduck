@@ -1,0 +1,93 @@
+// Canonical schema — PostgreSQL (production: Neon free tier, or any Postgres).
+// For zero-setup local dev use prisma/schema.sqlite.prisma (`npm run db:push`).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../db/dev.db"
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  domains      Domain[]
+  sessions     Session[]
+  subscription Subscription?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+}
+
+model Domain {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  mailboxToken String        @unique @default(cuid())
+  policy       String        @default("none") // none | quarantine | reject
+  createdAt    DateTime      @default(now())
+  reports      Report[]
+  alertEvents  AlertEvent[]
+
+  @@unique([userId, name])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  domainId   String
+  domain     Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  reportMeta String // report_id from the aggregate report
+  orgName    String // reporting provider (google.com, outlook.com, yahoo.com ...)
+  sourceIp   String
+  count      Int
+  spf        String // pass | fail
+  dkim       String // pass | fail
+  aligned    Boolean // identifier alignment (headerFrom matches passing auth)
+  headerFrom String
+  seenAt     DateTime // date_range.begin of the report
+  createdAt  DateTime @default(now())
+
+  @@index([domainId, seenAt])
+  @@index([domainId, sourceIp])
+}
+
+model AnalyzeRecord {
+  id        String   @id @default(nanoid(12))
+  payload   String // JSON of analysis result
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model AlertEvent {
+  id        String   @id @default(cuid())
+  domainId  String
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type      String // new_source | policy_recommendation | spike
+  payload   String
+  createdAt DateTime @default(now())
+  emailedAt DateTime?
+  @@index([domainId, createdAt])
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           String   @default("free") // free | active | cancelled | expired
+  plan             String   @default("free") // free | starter | studio
+  provider         String   @default("lemonsqueezy")
+  externalId       String?
+  currentPeriodEnd DateTime?
+  updatedAt        DateTime @updatedAt
+}

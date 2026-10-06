@@ -1,0 +1,32 @@
+<feedback>
+  <report_metadata>
+    <org_name>outlook.com</org_name>
+    <email>dmarcreports@microsoft.com</email>
+    <report_id>2025100612:abc123</report_id>
+    <date_range><begin>1759708800</begin><end>1759795199</end></date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>example.com</domain>
+    <adkim>r</adkim>
+    <aspf>r</aspf>
+    <p>quarantine</p>
+    <pct>100</pct>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>203.0.113.66</source_ip>
+      <count>96</count>
+      <policy_evaluated>
+        <disposition>quarantine</disposition>
+        <dkim>fail</dkim>
+        <spf>fail</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>completely-unrelated.biz</header_from>
+    </identifiers>
+    <auth_results>
+      <spf><domain>completely-unrelated.biz</domain><result>pass</result></spf>
+    </auth_results>
+  </record>
+</feedback>

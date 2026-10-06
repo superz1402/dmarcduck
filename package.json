@@ -1,0 +1,46 @@
+{
+  "name": "dmarcduck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DMARC monitoring that doesn't bite. Human-readable DMARC aggregate report analysis for small operators.",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start -p 3100",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate --schema prisma/schema.sqlite.prisma",
+    "db:push": "prisma db push --schema prisma/schema.sqlite.prisma && prisma generate --schema prisma/schema.sqlite.prisma",
+    "db:push:pg": "prisma db push --schema prisma/schema.prisma && prisma generate --schema prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "fast-xml-parser": "^4.5.1",
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.462.0",
+    "nanoid": "^5.0.9",
+    "next": "^15.1.6",
+    "next-themes": "^0.4.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.6",
+    "prisma": "^6.16.2",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
