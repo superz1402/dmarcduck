@@ -11,9 +11,12 @@ export const dynamic = "force-dynamic";
  * subscription_cancelled, subscription_expired, subscription_resumed.
  */
 async function verifySignature(raw: string, signature: string, secret: string): Promise<boolean> {
-  const { createHmac } = await import("node:crypto");
+  const { createHmac, timingSafeEqual } = await import("node:crypto");
   const mac = createHmac("sha256", secret).update(raw).digest("hex");
-  return mac === signature;
+  // Constant-time comparison: signature comparison must not leak timing.
+  const a = Buffer.from(mac, "utf8");
+  const b = Buffer.from(signature, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function POST(req: NextRequest) {
@@ -29,10 +32,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
   }
 
-  const event = JSON.parse(raw) as {
+  let event: {
     meta?: { event_name?: string; custom_data?: { email?: string } };
     data?: { attributes?: Record<string, unknown> };
   };
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: "Body is not valid JSON." }, { status: 400 });
+  }
   const email = event.meta?.custom_data?.email?.toLowerCase();
   const attrs = event.data?.attributes ?? {};
   const status = String(attrs.status ?? "active");

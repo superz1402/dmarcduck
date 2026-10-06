@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFeedbackXml, parseUpload, expandUpload } from "@/lib/dmarc/parser";
 import { analyzeReports } from "@/lib/dmarc/analyze";
-import { zipSync, strToU8 } from "fflate";
+import { zipSync, strToU8, gzipSync } from "fflate";
 
 const FIX = (n: string) => readFileSync(join(__dirname, "fixtures", n), "utf8");
 
@@ -125,5 +125,29 @@ describe("analyzeReports", () => {
     expect(a.volume).toBe(0);
     expect(a.health).toBe("attention");
     expect(a.warnings).toHaveLength(1);
+  });
+});
+
+describe("security guards", () => {
+  it("rejects XML declaring DTD entities (billion-laughs defense)", () => {
+    const evil = `<?xml version="1.0"?><!DOCTYPE feedback [<!ENTITY a "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">]><feedback></feedback>`;
+    const res = parseUpload("evil.xml", evil);
+    expect(res.reports).toHaveLength(0);
+    expect(res.warnings[0].reason).toMatch(/entities/i);
+  });
+
+  it("refuses gz decompression bombs beyond the 20 MB cap", () => {
+    // 30 MB of zeros compresses to ~30 KB — a classic bomb shape.
+    const big = new Uint8Array(30 * 1024 * 1024);
+    const gz = gzipSync(big);
+    expect(gz.length).toBeLessThan(1024 * 1024);
+    expect(expandUpload("bomb.gz", gz)).toEqual([]);
+  });
+
+  it("still expands legitimate small gz reports", () => {
+    const gz = gzipSync(strToU8(failingReport));
+    const out = expandUpload("report.xml.gz", gz);
+    expect(out).toHaveLength(1);
+    expect(new TextDecoder().decode(out[0].bytes)).toContain("<feedback>");
   });
 });

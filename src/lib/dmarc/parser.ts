@@ -152,18 +152,35 @@ export function parseFeedbackXml(xml: string): ParsedReport | null {
   };
 }
 
-/** Expand raw upload bytes into candidate XML files (handles .zip, .gz). */
+/**
+ * Expand raw upload bytes into candidate XML files (handles .zip, .gz).
+ *
+ * Decompression-bomb guard: compressed uploads are untrusted. Expanded content
+ * is capped per file and in total; anything beyond the cap is dropped rather
+ * than decompressed into memory.
+ */
+const MAX_EXPANDED_FILE = 20 * 1024 * 1024; // 20 MB per expanded XML
+const MAX_EXPANDED_TOTAL = 50 * 1024 * 1024; // 50 MB per upload
+
 export function expandUpload(name: string, bytes: Uint8Array): RawFile[] {
   const lower = name.toLowerCase();
+  let expandedTotal = 0;
   try {
     if (lower.endsWith(".zip")) {
       const files = unzipSync(bytes);
-      return Object.entries(files)
-        .filter(([n, b]) => !n.startsWith("__MACOSX") && b.length > 0)
-        .map(([n, b]) => ({ name: n, bytes: b }));
+      const out: RawFile[] = [];
+      for (const [n, b] of Object.entries(files)) {
+        if (n.startsWith("__MACOSX") || b.length === 0) continue;
+        expandedTotal += b.length;
+        if (b.length > MAX_EXPANDED_FILE || expandedTotal > MAX_EXPANDED_TOTAL) break;
+        out.push({ name: n, bytes: b });
+      }
+      return out;
     }
     if (lower.endsWith(".gz")) {
-      return [{ name: name.replace(/\.gz$/i, ""), bytes: gunzipSync(bytes) }];
+      const raw = gunzipSync(bytes);
+      if (raw.length > MAX_EXPANDED_FILE) return []; // bomb guard: refuse, caller warns
+      return [{ name: name.replace(/\.gz$/i, ""), bytes: raw }];
     }
   } catch {
     // fall through: treat as plain text below
@@ -176,10 +193,23 @@ export interface ParseResult {
   warnings: ParseWarning[];
 }
 
+/**
+ * Entity-declaration guard: DMARC reports have no legitimate use for DTD
+ * entity expansions, and XML entity bombs ("billion laughs") are processed
+ * before the parser's own limits apply. Refuse anything declaring entities.
+ */
+function hasEntityDeclaration(text: string): boolean {
+  return /<!DOCTYPE[^>]*\[|<!ENTITY/i.test(text.slice(0, 4096));
+}
+
 /** Parse one XML file's text into reports + warnings (may hold several <feedback> docs). */
 export function parseUpload(name: string, text: string): ParseResult {
   const reports: ParsedReport[] = [];
   const warnings: ParseWarning[] = [];
+  if (hasEntityDeclaration(text)) {
+    warnings.push({ file: name, reason: "document declares XML entities — rejected for safety, DMARC reports never use them" });
+    return { reports, warnings };
+  }
   const docs = splitFeedbackDocs(text);
   for (const doc of docs) {
     if (doc.trim().length < 20) continue;

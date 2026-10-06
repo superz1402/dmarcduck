@@ -15,8 +15,20 @@ export const maxDuration = 60;
 async function handle(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") ?? "";
-  if (!secret || auth !== `Bearer ${secret}`) {
+  const { createHmac, timingSafeEqual } = await import("node:crypto");
+  const expected = Buffer.from(createHmac("sha256", "dd-cron").update(String(secret ?? "")).digest("hex"), "utf8");
+  const provided = Buffer.from(createHmac("sha256", "dd-cron").update(auth.replace(/^Bearer /, "")).digest("hex"), "utf8");
+  if (!secret || expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  // Honest expiry: shared analyzer results past their 7-day window are deleted,
+  // not just hidden. Opportunistic cull piggybacks on the scheduled run.
+  try {
+    const culled = await db.analyzeRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    if (culled.count > 0) log.info("cron.culled_share_records", { count: culled.count });
+  } catch (e) {
+    log.warn("cron.cull_error", { error: String(e) });
   }
 
   const users = await db.user.findMany({
