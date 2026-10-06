@@ -72,3 +72,24 @@ spinner. No entrance animations, no parallax, no scroll hijacking.
 2. Start with the empty/loading/error trio, then wire data.
 3. Check mobile at 375px and desktop at 1280px.
 4. Read the rendered page in a browser before declaring done.
+
+## Forbid list (adopted from critique round 1, 2026-10-07)
+
+These are forbidden by name — adjectives like "clean" do nothing; named bans
+do. Source: @yuigui (Moltbook UI critique thread), agreeing with our own
+hierarchy audit.
+
+1. **No gradients.** Surfaces are flat tokens; depth comes from borders and
+   spacing, not glow.
+2. **No emoji icons.** Icons come from lucide-react, sized 4/5/8, `aria-hidden`.
+3. **No cards inside cards.** A card's children are text, tables, badges,
+   inputs — never another bordered surface.
+4. **One loud element per screen.** Exactly one primary banner/verdict; all
+   other content steps down in weight. Two loud elements = zero loud elements.
+5. **Every screen ships the trio**: loading (skeleton), empty (EmptyState with
+   next action), error (message + recovery path). Happy path is not "done".
+6. **Numbers are `.tnum` and right-aligned in tables.** Fewer decimals than
+   feels natural; alignment problems masquerade as spacing problems.
+7. **Long content must wrap safely**: `break-words`/`break-all` on user data,
+   `truncate` + title on filenames. A 100-character domain name must not
+   break the row layout.

@@ -17,6 +17,7 @@ interface SourceRow {
   spf: "pass" | "fail" | "mixed";
   dkim: "pass" | "fail" | "mixed";
   headerFrom: string;
+  envelopeFrom: string;
   orgs: string[];
   lastSeen: string;
 }
@@ -34,22 +35,25 @@ interface Detail {
   sources: SourceRow[];
   providers: { org: string; volume: number }[];
   ingestion?: IngestionEvent[];
+  unattributedRows?: number;
+  windowDays?: number;
 }
 
 interface IngestionEvent {
   id: string | null;
-  status: "processed" | "partial" | "rejected";
+  status: "processing" | "processed" | "partial" | "rejected";
   filesReceived: number;
   reportsParsed: number;
   recordsStored: number;
   duplicatesSkipped: number;
   mismatchSkipped: number;
   rejects: { name: string; reason: string }[];
+  inclusion: { attributed: boolean; inWindow: number; outsideWindow: number };
   createdAt: string;
 }
 
-function ingestBadgeTone(s: IngestionEvent["status"]): "success" | "danger" | "warning" {
-  return s === "processed" ? "success" : s === "partial" ? "warning" : "danger";
+function ingestBadgeTone(s: IngestionEvent["status"]): "success" | "danger" | "warning" | "neutral" {
+  return s === "processed" ? "success" : s === "partial" ? "warning" : s === "rejected" ? "danger" : "neutral";
 }
 
 function tone(v: string): "success" | "danger" | "warning" {
@@ -197,6 +201,7 @@ export function DomainDetail({ domainId }: { domainId: string }) {
                     <TH>SPF</TH>
                     <TH>DKIM</TH>
                     <TH>Claimed from</TH>
+                    <TH>Envelope from</TH>
                     <TH>Last seen</TH>
                   </TR>
                 </THead>
@@ -209,6 +214,7 @@ export function DomainDetail({ domainId }: { domainId: string }) {
                       <TD><Badge tone={tone(s.spf)}>{s.spf}</Badge></TD>
                       <TD><Badge tone={tone(s.dkim)}>{s.dkim}</Badge></TD>
                       <TD className="font-mono text-xs">{s.headerFrom || "—"}</TD>
+                      <TD className="font-mono text-xs text-muted-foreground">{s.envelopeFrom || "—"}</TD>
                       <TD className="tnum text-xs text-muted-foreground">
                         {new Date(s.lastSeen).toLocaleDateString()}
                       </TD>
@@ -250,7 +256,14 @@ export function DomainDetail({ domainId }: { domainId: string }) {
               body="Once your DMARC rua tag points at the ingestion URL, each delivery shows up here with what was stored and what was skipped. Providers typically send within 24 hours."
             />
           ) : (
-            <ul className="divide-y divide-border">
+            <>
+              {(data.unattributedRows ?? 0) > 0 ? (
+                <p className="mb-3 rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                  <span className="tnum font-medium text-foreground">{data.unattributedRows!.toLocaleString()}</span> stored{" "}
+                  {data.unattributedRows === 1 ? "row" : "rows"} predate per-delivery attribution — what became of them in the stats is unknown, not inferred.
+                </p>
+              ) : null}
+              <ul className="divide-y divide-border">
               {data.ingestion.map((ev) => (
                 <li key={ev.id ?? ev.createdAt} className="py-3 first:pt-0 last:pb-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -285,9 +298,25 @@ export function DomainDetail({ domainId }: { domainId: string }) {
                       ))}
                     </ul>
                   )}
+                  {ev.inclusion.attributed && (ev.recordsStored > 0 || ev.inclusion.inWindow > 0 || ev.inclusion.outsideWindow > 0) ? (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      In this {data.windowDays ?? 30}-day view:{" "}
+                      <span className="tnum font-medium text-foreground">{ev.inclusion.inWindow}</span>{" "}
+                      included
+                      {ev.inclusion.outsideWindow > 0 ? (
+                        <> · <span className="tnum font-medium text-foreground">{ev.inclusion.outsideWindow}</span> stored outside the window (in the database, not in the stats)</>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {!ev.inclusion.attributed ? (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Inclusion in the stats: <span className="font-medium text-foreground">unknown</span> — this delivery predates per-event attribution, so we cannot say which rows are in the current window without guessing. We do not guess.
+                    </p>
+                  ) : null}
                 </li>
               ))}
-            </ul>
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>

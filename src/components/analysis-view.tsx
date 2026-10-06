@@ -156,6 +156,7 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
                     <TH>SPF</TH>
                     <TH>DKIM</TH>
                     <TH>Claimed from</TH>
+                    <TH>Envelope from</TH>
                     <TH>What this means</TH>
                   </TR>
                 </THead>
@@ -167,6 +168,8 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
                       <TD>
                         {s.dmarc === "pass" ? (
                           <Badge tone="success">pass</Badge>
+                        ) : s.likelyForwarded ? (
+                          <Badge tone="warning">forwarded?</Badge>
                         ) : s.suspicion === "high" ? (
                           <Badge tone="danger">spoof?</Badge>
                         ) : (
@@ -184,6 +187,7 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
                         </Badge>
                       </TD>
                       <TD className="font-mono text-xs">{s.headerFrom || "—"}</TD>
+                      <TD className="font-mono text-xs text-muted-foreground">{s.envelopeFrom ? s.envelopeFrom.split(", ")[0] : "—"}</TD>
                       <TD className="max-w-72 text-xs leading-relaxed text-muted-foreground">{s.note}</TD>
                     </TR>
                   ))}
@@ -193,6 +197,56 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Sender identities — the "who is sending as me" view (grouping of the
+          IP table above by header_from + envelope_from pair). */}
+      {analysis.senders.length > 1 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sender identities</CardTitle>
+            <CardDescription>
+              The same traffic grouped by claimed From + envelope domain instead of by IP — one row per sending identity.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 pb-2">
+            <div className="scroll-slim max-h-72 overflow-y-auto">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Identity</TH>
+                    <TH className="text-right">Emails</TH>
+                    <TH>DMARC</TH>
+                    <TH>IPs</TH>
+                    <TH>What this means</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {analysis.senders.map((s) => (
+                    <TR key={`${s.headerFrom}-${s.envelopeFrom}`}>
+                      <TD className="font-mono text-xs">
+                        {s.headerFrom || "—"}
+                        <span className="text-muted-foreground"> via {s.envelopeFrom || "?"}</span>
+                      </TD>
+                      <TD className="tnum text-right">{s.volume.toLocaleString()}</TD>
+                      <TD>
+                        {s.dmarc === "pass" ? (
+                          <Badge tone="success">pass</Badge>
+                        ) : s.likelyForwarded ? (
+                          <Badge tone="warning">forwarded?</Badge>
+                        ) : (
+                          <Badge tone="danger">fail</Badge>
+                        )}
+                      </TD>
+                      <TD className="tnum">{s.ips}</TD>
+                      <TD className="max-w-72 text-xs leading-relaxed text-muted-foreground">{s.note}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Providers */}
       {analysis.providers.length > 0 ? (

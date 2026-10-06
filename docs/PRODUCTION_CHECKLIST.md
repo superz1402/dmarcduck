@@ -1,6 +1,6 @@
 # Production Checklist — DmarcDuck
 
-updated: 2026-10-07 · verified from a production build (`next build` + `next start`)
+updated: 2026-10-07 (evening: ledger v2, forwarder detection, §7.1 checker — see below) · verified from a production build (`next build` + `next start`)
 exercised end-to-end by an automated smoke suite (`51/51`) plus screenshot review.
 
 Legend: ✅ verified working · 🔶 code done, needs an external account · ⏳ blocked on owner action
@@ -33,6 +33,18 @@ Legend: ✅ verified working · 🔶 code done, needs an external account · ⏳
 | Lemon Squeezy checkout + webhook | 🔶 | webhook fully coded + verified against 503/401 paths; needs LS account + products |
 | ZIP/GZ expansion + decompression-bomb caps (20MB/file, 50MB/upload) | ✅ | tested |
 | XML entity-declaration rejection (billion-laughs defense) | ✅ | tested |
+
+## Verified in evening session 2026-10-07 (production build, live smoke)
+
+| Component | Status | Evidence |
+|---|---|---|
+| Parser: auth_results / reasons / envelope_from extraction | ✅ | 18 new unit tests (33/33 total) |
+| Forwarder detection (positive evidence only) | ✅ | explicit reason tags + list-shaped envelopes flagged `forwarded?`; spoof shape (unexplained third-party envelope) still `spoof?` — tested both |
+| Sender identities grouping (header_from × envelope_from) | ✅ | analyze API verified live: identities grouped, distinct-IP notes |
+| §7.1 rua-check API + /tools/dmarc-record page | ✅ | live: external record generated for example.com; DoH verify found=false (unpublished), authorized=true (google.com self-auth record), wrong-record (wildcard SPF) all distinguished |
+| Ledger v2: event-first creation + per-event inclusion | ✅ | live E2E: signup→domain→ingest×2 (dedupe)→detail shows inclusion {inWindow:0, outsideWindow:2} for out-of-window report; unattributedRows=0 |
+| Mismatch refusal unchanged | ✅ | 422 + ledger event, no storage (re-verified) |
+| Schema migration path | ✅ (push) | pg + sqlite schemas carry Report.eventId/envelopeFrom/dkimAuth/reasons; non-destructive push documented in DEPLOYMENT.md |
 
 ## Deployment — what is ready, what is missing
 

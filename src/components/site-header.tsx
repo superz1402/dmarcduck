@@ -14,6 +14,9 @@ export function SiteHeader() {
           <Link href="/analyze" className="rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             Analyze a report
           </Link>
+          <Link href="/tools/dmarc-record" className="rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            rua checker
+          </Link>
           <Link href="/pricing" className="rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             Pricing
           </Link>

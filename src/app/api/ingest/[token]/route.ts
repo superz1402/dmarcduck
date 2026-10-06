@@ -20,8 +20,10 @@ const MAX_BODY_BYTES = 20 * 1024 * 1024; // 20 MB, same cap as the analyzer
  *   - multipart/form-data with file(s) (.xml/.zip/.gz)
  *
  * Every call writes an IngestionEvent — a durable ledger of what arrived,
- * what parsed, what was stored, and what was rejected. A user should never
- * have to wonder whether DmarcDuck actually processed their report.
+ * what parsed, what was stored, and what was rejected. Stored rows carry the
+ * event id, so the dashboard can attribute aggregate inclusion per delivery
+ * instead of guessing from counts. A user should never have to wonder
+ * whether DmarcDuck actually processed their report.
  *
  * Responses:
  *   200 { ok, stored, event }          — at least one report processed (fully or partially)
@@ -94,6 +96,27 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     return NextResponse.json({ error: "Could not read payload." }, { status: 400 });
   }
 
+  if (filesReceived === 0 && rejects.length === 0) {
+    return NextResponse.json(
+      { error: "No files in this payload. Send an XML body or multipart files under the \"files\" field." },
+      { status: 400 }
+    );
+  }
+
+  // ---- open the ledger event BEFORE storing --------------------------------
+  // Creating it first is what lets every stored Report row carry the event id
+  // (aggregate-inclusion attribution). Ledger failure must not fail ingestion:
+  // rows stored without an event simply report inclusion as unattributed.
+  let eventId: string | null = null;
+  try {
+    const ev = await db.ingestionEvent.create({
+      data: { domainId: domain.id, status: "processing", sourceIp, contentType },
+    });
+    eventId = ev.id;
+  } catch (e) {
+    log.warn("ingest.ledger_error", { error: String(e), domainId: domain.id });
+  }
+
   // ---- parse + store with per-file accounting ------------------------------
   const textDecoder = new TextDecoder("utf-8", { fatal: false });
   for (const f of incoming) {
@@ -123,6 +146,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
           await db.report.create({
             data: {
               domainId: domain.id,
+              eventId,
               reportMeta: r.reportId || "unknown",
               orgName: r.orgName,
               sourceIp: rec.sourceIp,
@@ -131,6 +155,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
               dkim: rec.dkim,
               aligned: rec.spf === "pass" || rec.dkim === "pass",
               headerFrom: rec.headerFrom,
+              envelopeFrom: rec.envelopeFrom || null,
+              dkimAuth: rec.dkimAuth.length > 0 ? JSON.stringify(rec.dkimAuth.slice(0, 10)) : null,
+              reasons: rec.reasons.length > 0 ? JSON.stringify(rec.reasons.slice(0, 10)) : null,
               seenAt: r.dateBegin ? new Date(r.dateBegin * 1000) : new Date(),
             },
           });
@@ -147,37 +174,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     }
   }
 
-  // ---- write the ledger event ---------------------------------------------
-  // Nothing arrived at all (e.g. multipart without a "files" field) is a client error,
-  // not a silent success — say so honestly.
-  if (filesReceived === 0 && rejects.length === 0) {
-    return NextResponse.json(
-      { error: "No files in this payload. Send an XML body or multipart files under the \"files\" field." },
-      { status: 400 }
-    );
-  }
-
+  // ---- finalize the ledger event -------------------------------------------
   const status = recordsStored > 0 ? (rejects.length > 0 ? "partial" : "processed") : rejects.length > 0 ? "rejected" : "processed";
-  let eventId: string | null = null;
-  try {
-    const ev = await db.ingestionEvent.create({
-      data: {
-        domainId: domain.id,
-        status,
-        filesReceived,
-        reportsParsed,
-        recordsStored,
-        duplicatesSkipped,
-        mismatchSkipped,
-        rejects: JSON.stringify(rejects.slice(0, 25)),
-        sourceIp,
-        contentType,
-      },
-    });
-    eventId = ev.id;
-  } catch (e) {
-    // Ledger is an enhancement; ingestion itself must not fail because of it.
-    log.warn("ingest.ledger_error", { error: String(e), domainId: domain.id });
+  if (eventId) {
+    try {
+      await db.ingestionEvent.update({
+        where: { id: eventId },
+        data: { status, filesReceived, reportsParsed, recordsStored, duplicatesSkipped, mismatchSkipped, rejects: JSON.stringify(rejects.slice(0, 25)) },
+      });
+    } catch (e) {
+      log.warn("ingest.ledger_update_error", { error: String(e), domainId: domain.id });
+    }
   }
 
   const event = { id: eventId, status, filesReceived, reportsParsed, recordsStored, duplicatesSkipped, mismatchSkipped, rejects };

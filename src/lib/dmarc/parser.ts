@@ -16,6 +16,23 @@ import { unzipSync, gunzipSync } from "fflate";
 
 export type Verdict = "pass" | "fail";
 
+export interface DkimAuth {
+  domain: string; // d= identity that signed
+  selector: string | null;
+  result: string; // pass | fail | none | ...
+}
+
+export interface SpfAuth {
+  domain: string; // envelope-from (mfrom) domain evaluated by SPF
+  scope: string | null; // mfrom | helo
+  result: string;
+}
+
+export interface EvalReason {
+  type: string; // forwarded | trusted_forwarder | mailing_list | sampled_out | ...
+  comment: string;
+}
+
 export interface ParsedRecord {
   sourceIp: string;
   count: number;
@@ -23,6 +40,11 @@ export interface ParsedRecord {
   dkim: Verdict; // policy_evaluated.dkim (alignment-aware)
   headerFrom: string;
   disposition: string;
+  envelopeFrom: string; // identifiers.envelope_from ("" when absent)
+  envelopeTo: string; // identifiers.envelope_to ("" when absent)
+  dkimAuth: DkimAuth[]; // auth_results.dkim — which identities signed and how
+  spfAuth: SpfAuth[]; // auth_results.spf — which envelope domains were evaluated
+  reasons: EvalReason[]; // policy_evaluated.reason — receiver's own explanation
 }
 
 export interface ParsedReport {
@@ -124,6 +146,23 @@ export function parseFeedbackXml(xml: string): ParsedReport | null {
       const row = (rec.row ?? {}) as Record<string, unknown>;
       const evald = (row.policy_evaluated ?? {}) as Record<string, unknown>;
       const ids = (rec.identifiers ?? {}) as Record<string, unknown>;
+      const auth = (rec.auth_results ?? {}) as Record<string, unknown>;
+
+      const dkimAuth: DkimAuth[] = asArray(auth.dkim as Record<string, unknown> | Record<string, unknown>[] | undefined).map((d) => ({
+        domain: str(d.domain).toLowerCase(),
+        selector: str(d.selector).toLowerCase() || null,
+        result: str(d.result).toLowerCase() || "none",
+      }));
+      const spfAuth: SpfAuth[] = asArray(auth.spf as Record<string, unknown> | Record<string, unknown>[] | undefined).map((s) => ({
+        domain: str(s.domain).toLowerCase(),
+        scope: str(s.scope).toLowerCase() || null,
+        result: str(s.result).toLowerCase() || "none",
+      }));
+      const reasons: EvalReason[] = asArray(evald.reason as Record<string, unknown> | Record<string, unknown>[] | undefined).map((r) => ({
+        type: str(r.type).toLowerCase(),
+        comment: str(r.comment),
+      }));
+
       return {
         sourceIp: str(row.source_ip),
         count: Math.max(0, toInt(row.count, 1)),
@@ -131,6 +170,11 @@ export function parseFeedbackXml(xml: string): ParsedReport | null {
         dkim: verdict(evald.dkim),
         headerFrom: str(ids.header_from).toLowerCase(),
         disposition: str(evald.disposition).toLowerCase() || "none",
+        envelopeFrom: str(ids.envelope_from).toLowerCase(),
+        envelopeTo: str(ids.envelope_to).toLowerCase(),
+        dkimAuth,
+        spfAuth,
+        reasons,
       };
     }
   );

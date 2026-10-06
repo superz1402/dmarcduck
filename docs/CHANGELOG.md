@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+### Added — RFC 7489 §7.1 external RUA authorization checker (guided compliance)
+- New tool page `/tools/dmarc-record` + API `POST /api/tools/rua-check`:
+  paste a DMARC record and get the exact authorization TXT records each
+  external report destination must publish — the fix for the classic
+  "rua is set but reports never arrive" silent failure (receivers are
+  REQUIRED to withhold reports until the destination authorizes).
+- Optional live verification via DNS-over-HTTPS (Cloudflare, 3s timeout,
+  graceful degradation). Distinguishes authorized / missing / wrong-record
+  (wildcard or leftover SPF at the same name) / lookup-error — found live
+  during testing, so the UI never claims "not published" when a non-DMARC
+  TXT actually exists.
+- Record parser catches real misconfigurations: missing v/p tags, bad pct,
+  strict-alignment advisories, p=none-without-rua advice. Fully unit-tested
+  (18 new tests).
+
+### Added — Forwarder detection + sender identities (parser + analyzer)
+- Parser now extracts `identifiers.envelope_from`, `auth_results.dkim`
+  (domain/selector/result) and `policy_evaluated.reason` — the evidence
+  real receivers send and most tools ignore.
+- **Forwarder detection with positive evidence only**: receiver reason tags
+  (forwarded, trusted_forwarder, mailing_list, alias) or list-shaped
+  envelope domains (googlegroups.com, lists.*, mailman…). Failing mail with
+  that evidence is labeled `forwarded?` instead of `spoof?` — deliberately
+  NO envelope-mismatch heuristic, because a spammer's own envelope looks
+  identical to a forwarder's; without positive evidence suspicion is NOT
+  downgraded, the envelope is mentioned in the note instead.
+- **Sender identities view**: same traffic grouped by header_from +
+  envelope_from pairs ("who is sending as me") alongside the IP view, with
+  distinct-IP counts and identity-level notes.
+
+### Changed — Ingestion ledger v2: acceptance ≠ inclusion
+- `Report` rows now carry the `IngestionEvent` id that delivered them; the
+  event is created BEFORE storing (rows stored when the ledger itself fails
+  are honestly reported as unattributed, never guessed).
+- The domain dashboard ledger now answers the question @settlestackresearch
+  posed on Moltbook: **ingestion acceptance is not aggregate inclusion**.
+  Each event shows how many of its records are IN the current plan window,
+  how many are stored outside it, and unattributable rows show
+  "inclusion: unknown" explicitly instead of an inferred number.
+- Domain detail sources table gains an "Envelope from" column.
+- Prisma schema (pg + sqlite): `Report.eventId`, `Report.envelopeFrom`,
+  `Report.dkimAuth`, `Report.reasons`; index on `eventId`. Schema push is
+  part of the deployment runbook (docs/DEPLOYMENT.md).
+- Ingest route restructured: ledger event opened before storage, finalized
+  after; ledger failures still never fail ingestion.
+- UI system: forbid-list adopted from the critique round (no gradients,
+  no emoji icons, no cards inside cards, one loud element per screen).
+
 ### Changed — Guided analysis notes (start of the differentiator)
 - "What this means" per source no longer says one line for every passing
   source. Passing sources now explain WHICH mechanism carried the mail and
