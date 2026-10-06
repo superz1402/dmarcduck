@@ -181,11 +181,16 @@ export function DomainDetail({ domainId }: { domainId: string }) {
               ) : (
                 <EmptyState
                   title="No reports stored yet"
-                  body="Point your domain's DMARC rua tag at the ingestion URL (the copy button above) and reports will start landing within 24 hours — providers typically send daily."
+                  body="Point your domain's DMARC rua tag at the ingestion URL (the copy button above) and reports will start landing within 24 hours — providers typically send daily. Reports not arriving at all? The usual cause is the external-report authorization record."
                   action={
-                    <Link href="/docs/ingestion">
-                      <Button variant="outline" size="sm">Ingestion docs</Button>
-                    </Link>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Link href="/docs/ingestion">
+                        <Button variant="outline" size="sm">Ingestion docs</Button>
+                      </Link>
+                      <Link href="/tools/dmarc-record">
+                        <Button variant="outline" size="sm">Check rua authorization</Button>
+                      </Link>
+                    </div>
                   }
                 />
               )}
