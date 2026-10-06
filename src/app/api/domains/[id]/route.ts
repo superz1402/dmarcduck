@@ -7,7 +7,10 @@ import { log } from "@/lib/log";
 async function loadOwned(userId: string, domainId: string) {
   const domain = await db.domain.findUnique({
     where: { id: domainId },
-    include: { reports: { orderBy: { seenAt: "desc" }, take: 2000 } },
+    include: {
+      reports: { orderBy: { seenAt: "desc" }, take: 2000 },
+      ingestions: { orderBy: { createdAt: "desc" }, take: 10 },
+    },
   });
   if (!domain || domain.userId !== userId) return null;
   return domain;
@@ -75,6 +78,19 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     providers: Array.from(orgVolume.entries())
       .map(([org, v]) => ({ org, volume: v }))
       .sort((a, b) => b.volume - a.volume),
+    // Ingestion ledger — the last 10 delivery attempts, so the user always
+    // knows whether their reports arrived and what happened to them.
+    ingestion: domain.ingestions.map((ev) => ({
+      id: ev.id,
+      status: ev.status,
+      filesReceived: ev.filesReceived,
+      reportsParsed: ev.reportsParsed,
+      recordsStored: ev.recordsStored,
+      duplicatesSkipped: ev.duplicatesSkipped,
+      mismatchSkipped: ev.mismatchSkipped,
+      rejects: JSON.parse(ev.rejects || "[]"),
+      createdAt: ev.createdAt,
+    })),
   });
 }
 

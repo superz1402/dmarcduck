@@ -17,9 +17,14 @@ them in sync or delete the SQLite one.
   reportMeta (provider's report id), orgName (reporting provider), sourceIp,
   count, spf/dkim (policy_evaluated verdicts), aligned (bool: either pass),
   headerFrom, seenAt (= date_range.begin). Indexes: (domainId, seenAt),
-  (domainId, sourceIp).
+  (domainId, sourceIp), plus a UNIQUE (domainId, reportMeta, sourceIp, seenAt,
+  count) — the cross-request duplicate guard: re-sent reports never double-count.
 - **AnalyzeRecord** — shareable analyzer results; nanoid(12) id, JSON payload,
   expiresAt = +7d. (Cull expired rows opportunistically; volume is low.)
+- **IngestionEvent** — the ingestion ledger: one row per delivery attempt
+  (status processed/partial/rejected, filesReceived, reportsParsed,
+  recordsStored, duplicatesSkipped, mismatchSkipped, JSON rejects). Answer the
+  question "did DmarcDuck actually process my report?" — never silently.
 - **AlertEvent** — domainId, type (new_source|...), JSON payload, emailedAt.
 - **Subscription** — userId (unique), status, plan, provider, externalId,
   currentPeriodEnd. Entitlements derive from this via `src/lib/plan.ts`.

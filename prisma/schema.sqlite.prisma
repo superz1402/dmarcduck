@@ -39,6 +39,7 @@ model Domain {
   createdAt    DateTime      @default(now())
   reports      Report[]
   alertEvents  AlertEvent[]
+  ingestions   IngestionEvent[]
 
   @@unique([userId, name])
 }
@@ -60,6 +61,7 @@ model Report {
 
   @@index([domainId, seenAt])
   @@index([domainId, sourceIp])
+  @@unique([domainId, reportMeta, sourceIp, seenAt, count])
 }
 
 model AnalyzeRecord {
@@ -90,4 +92,22 @@ model Subscription {
   externalId       String?
   currentPeriodEnd DateTime?
   updatedAt        DateTime @updatedAt
+}
+
+model IngestionEvent {
+  id               String   @id @default(cuid())
+  domainId         String
+  domain           Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  status           String   // processed | partial | rejected
+  filesReceived    Int      @default(0)
+  reportsParsed    Int      @default(0)
+  recordsStored    Int      @default(0)
+  duplicatesSkipped Int     @default(0)
+  mismatchSkipped  Int      @default(0) // reports for a different domain than the token
+  rejects          String   @default("[]") // JSON: [{name, reason}] per unparseable file
+  sourceIp         String?
+  contentType      String?
+  createdAt        DateTime @default(now())
+
+  @@index([domainId, createdAt])
 }

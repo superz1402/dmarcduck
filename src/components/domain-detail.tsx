@@ -32,6 +32,23 @@ interface Detail {
   };
   sources: SourceRow[];
   providers: { org: string; volume: number }[];
+  ingestion?: IngestionEvent[];
+}
+
+interface IngestionEvent {
+  id: string | null;
+  status: "processed" | "partial" | "rejected";
+  filesReceived: number;
+  reportsParsed: number;
+  recordsStored: number;
+  duplicatesSkipped: number;
+  mismatchSkipped: number;
+  rejects: { name: string; reason: string }[];
+  createdAt: string;
+}
+
+function ingestBadgeTone(s: IngestionEvent["status"]): "success" | "danger" | "warning" {
+  return s === "processed" ? "success" : s === "partial" ? "warning" : "danger";
 }
 
 function tone(v: string): "success" | "danger" | "warning" {
@@ -205,6 +222,62 @@ export function DomainDetail({ domainId }: { domainId: string }) {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Report ingestion activity</CardTitle>
+          <CardDescription>
+            Every delivery attempt to the ingestion URL — nothing happens silently.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!data.ingestion || data.ingestion.length === 0 ? (
+            <EmptyState
+              title="No reports have arrived yet"
+              body="Once your DMARC rua tag points at the ingestion URL, each delivery shows up here with what was stored and what was skipped. Providers typically send within 24 hours."
+            />
+          ) : (
+            <ul className="divide-y divide-border">
+              {data.ingestion.map((ev) => (
+                <li key={ev.id ?? ev.createdAt} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={ingestBadgeTone(ev.status)}>{ev.status}</Badge>
+                    <span className="tnum text-sm">
+                      {ev.recordsStored > 0 && (
+                        <>
+                          <span className="tnum font-medium">{ev.recordsStored.toLocaleString()}</span>{" "}
+                          record{ev.recordsStored === 1 ? "" : "s"} stored
+                        </>
+                      )}
+                      {ev.duplicatesSkipped > 0 && (
+                        <span className="text-muted-foreground"> · <span className="tnum">{ev.duplicatesSkipped}</span> duplicate{ev.duplicatesSkipped === 1 ? "" : "s"} skipped</span>
+                      )}
+                      {ev.mismatchSkipped > 0 && (
+                        <span className="text-muted-foreground"> · <span className="tnum">{ev.mismatchSkipped}</span> for another domain</span>
+                      )}
+                      {ev.recordsStored === 0 && ev.duplicatesSkipped === 0 && ev.mismatchSkipped === 0 && ev.status !== "rejected" && (
+                        <span className="text-muted-foreground">nothing new to store</span>
+                      )}
+                    </span>
+                    <time className="tnum ml-auto text-xs text-muted-foreground" dateTime={ev.createdAt}>
+                      {new Date(ev.createdAt).toLocaleString()}
+                    </time>
+                  </div>
+                  {ev.rejects.length > 0 && (
+                    <ul className="mt-2 space-y-1 border-l-2 border-border pl-3">
+                      {ev.rejects.map((rj, i) => (
+                        <li key={i} className="text-xs text-muted-foreground">
+                          <span className="font-mono">{rj.name}</span> — {rj.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

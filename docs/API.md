@@ -49,9 +49,23 @@ providers and plan info). Window = plan history days.
 Deletes domain + reports (DB cascade). Data is gone; documented.
 
 ## POST /api/ingest/[mailboxToken]  (capability URL, 120/hr/token)
-Accepts raw XML body or multipart `files`. Skips reports whose
-policy_published domain doesn't match the registered domain (logged).
-Returns `{ok: true, stored: <rows>}`.
+Accepts raw XML body or multipart `files` (.xml/.zip/.gz, 20 MB cap).
+Every call writes an **IngestionEvent** — the ingestion ledger. Reports whose
+policy_published domain doesn't match the registered domain are refused and
+counted, never stored. Identical (report, source IP, window, count) rows are
+deduplicated across requests.
+
+Responses:
+- `200 {ok: true, stored, event}` — stored (fully or partially; `event.status`
+  is `processed` or `partial`)
+- `422 {error, event}` — nothing usable (permanent failure; senders should not retry)
+- `400` — unreadable / empty payload; `415` wrong content type; `413` over 20 MB
+- `404` unknown token (uniform — cannot enumerate tokens); `429` rate limited
+
+The `event` object: `{status, filesReceived, reportsParsed, recordsStored,
+duplicatesSkipped, mismatchSkipped, rejects: [{name, reason}]}`. The last 10
+events per domain are exposed to the owner at `GET /api/domains/[id]` and
+rendered as "Report ingestion activity" on the domain dashboard.
 
 ## GET|POST /api/cron/digest  (Authorization: Bearer CRON_SECRET)
 Weekly pass: per active-plan domain — weekly digest email (Resend) and
