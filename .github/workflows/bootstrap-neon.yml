@@ -2,12 +2,18 @@ name: Bootstrap Neon database
 
 # One-time (idempotent) production database bootstrap:
 #   1. Create (or reuse) the Neon project named "dmarcduck"
-#   2. Push the canonical Prisma schema to it
+#   2. Push the canonical Prisma schema to it (over the HTTPS SQL endpoint)
 #   3. Store DATABASE_URL + CRON_SECRET as Worker secrets on the deployed
 #      Cloudflare Worker (run deploy.yml first so the Worker exists)
 #
-# Safe to re-run: project lookup by name, schema push is idempotent,
-# secrets are overwritten with the same/current values.
+# Safe to re-run:
+#   - If the repo secret DATABASE_URL already exists, the workflow uses it and
+#     only re-applies the schema (no project creation, no password rotation).
+#   - First-ever run creates the project and rotates the role password to mint
+#     a fresh connection string (the Neon API never returns stored passwords).
+#
+# NOTE: talks to console.neon.tech — the old api.neon.tech host no longer
+# resolves (verified 2026-10-07, both from a local sandbox and GH runners).
 
 on:
   workflow_dispatch: {}
@@ -30,15 +36,32 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Create (or reuse) Neon project
+      - name: Check whether DATABASE_URL secret already exists
+        id: secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names="$(curl -sS -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/secrets" \
+            | python3 -c "import json,sys;print(' '.join(s['name'] for s in json.load(sys.stdin).get('secrets',[])))")"
+          echo "repo secrets present: $names"
+          if echo "$names" | grep -qw DATABASE_URL; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: First run — create (or reuse) Neon project + mint connection string
         id: neon
+        if: steps.secrets.outputs.exists != 'true'
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
           set -euo pipefail
+          API="https://console.neon.tech/api/v2"
           existing="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://api.neon.tech/v2/projects" \
-            | python3 -c "import json,sys;print(next((p['id'] for p in json.load(sys.stdin).get('projects',[]) if p['name']=='dmarcduck'),''))")"
+            "$API/projects" \
+            | python3 -c "import json,sys;print(next((p['id'] for p in json.load(sys.stdin).get('projects',[]) if p['name'].lower()=='dmarcduck'),''))")"
           if [ -n "$existing" ]; then
             echo "reusing existing Neon project: $existing"
             project_id="$existing"
@@ -47,69 +70,67 @@ jobs:
             project_id="$(curl -sS -X POST -H "Authorization: Bearer $NEON_API_KEY" \
               -H "Content-Type: application/json" \
               -d '{"project":{"name":"dmarcduck"}}' \
-              "https://api.neon.tech/v2/projects" \
+              "$API/projects" \
               | python3 -c "import json,sys;print(json.load(sys.stdin)['project']['id'])")"
           fi
-          echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve pooled connection URI
-        id: uri
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          PROJECT_ID: ${{ steps.neon.outputs.project_id }}
-        run: |
-          set -euo pipefail
-          branches="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches")"
-          branch="$(echo "$branches" | python3 -c "import json,sys;bs=json.load(sys.stdin)['branches'];print(next(b['id'] for b in bs if b.get('primary') or b.get('default')))")"
+          branch="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "$API/projects/$project_id/branches" \
+            | python3 -c "import json,sys;bs=json.load(sys.stdin)['branches'];print(next(b['id'] for b in bs if b.get('primary') or b.get('default')))")"
           role="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/roles" \
+            "$API/projects/$project_id/branches/$branch/roles" \
             | python3 -c "import json,sys;print(json.load(sys.stdin)['roles'][0]['name'])")"
           dbname="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/databases" \
+            "$API/projects/$project_id/branches/$branch/databases" \
             | python3 -c "import json,sys;print(json.load(sys.stdin)['databases'][0]['name'])")"
-          uri="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/connection_uri?pooled=true&role_name=$role&database_name=$dbname" \
-            | python3 -c "import json,sys;print(json.load(sys.stdin)['uri'])")"
+          # The API never returns stored passwords; rotate once to mint a fresh
+          # one (the response echoes the new password).
+          password="$(curl -sS -X POST -H "Authorization: Bearer $NEON_API_KEY" \
+            "$API/projects/$project_id/branches/$branch/roles/$role/reset_password" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['role']['password'])")"
+          # Derive the pooled host from the endpoint host:
+          #   ep-xxx.c-N.region.aws.neon.tech -> ep-xxx-pooler.region.aws.neon.tech
+          pooler="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "$API/projects/$project_id/endpoints" \
+            | python3 scripts/neon_pooler_host.py "$branch")"
+          uri="postgresql://$role:$password@$pooler/$dbname?sslmode=require"
           echo "::add-mask::$uri"
           echo "uri=$uri" >> "$GITHUB_OUTPUT"
+          echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
 
-      - name: Push Prisma schema to Neon
-        env:
-          DATABASE_URL: ${{ steps.uri.outputs.uri }}
-        run: |
-          npm ci
-          npx prisma db push --schema prisma/schema.prisma
-
-      - name: Write DATABASE_URL to Worker secrets
+      - name: First run — set Worker secrets (DATABASE_URL, CRON_SECRET)
+        if: steps.secrets.outputs.exists != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DATABASE_URL: ${{ steps.uri.outputs.uri }}
-        run: echo "$DATABASE_URL" | npx wrangler secret put DATABASE_URL
-
-      - name: Write CRON_SECRET to Worker secrets
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ steps.neon.outputs.uri }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: echo "$CRON_SECRET" | npx wrangler secret put CRON_SECRET
+        run: |
+          echo "$DATABASE_URL" | npx wrangler secret put DATABASE_URL
+          echo "$CRON_SECRET" | npx wrangler secret put CRON_SECRET
 
-      - name: "Best-effort: mirror DATABASE_URL as a repo secret"
+      - name: First run — mirror DATABASE_URL as a repo secret
+        if: steps.secrets.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          DATABASE_URL: ${{ steps.uri.outputs.uri }}
+          DATABASE_URL: ${{ steps.neon.outputs.uri }}
         run: |
           python3 scripts/set_github_secret.py "DATABASE_URL=$DATABASE_URL" \
-            || echo "WARNING: GITHUB_TOKEN cannot write repo secrets; Worker secret is still set (step above), continuing."
+            || echo "WARNING: GITHUB_TOKEN could not write repo secrets; Worker secret is set (step above)."
+
+      - name: Push Prisma schema (HTTPS SQL endpoint, IPv4-first)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npm ci
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/init.sql
+          NODE_OPTIONS="--dns-result-order=ipv4first" node scripts/apply_neon_schema.mjs /tmp/init.sql
 
       - name: Summary
         run: |
           {
             echo "## Neon bootstrap complete"
             echo ""
-            echo "- Project id: \`${{ steps.neon.outputs.project_id }}\`"
-            echo "- Schema pushed (User, Session, Domain, Report, AnalyzeRecord, AlertEvent, Subscription, IngestionEvent)"
-            echo "- DATABASE_URL and CRON_SECRET stored as Worker secrets"
+            echo "- Schema verified against the production database"
             echo "- Health check: https://dmarcduck.ansaribilal1402.workers.dev/api/health"
+            echo "- Next run of deploy.yml picks up any wrangler config changes"
           } >> "$GITHUB_STEP_SUMMARY"

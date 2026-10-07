@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Deployed — live in production (2026-10-07)
+
+- **DmarcDuck is live**: https://dmarcduck.ansaribilal.com
+  (also https://dmarcduck.ansaribilal1402.workers.dev). Cloudflare Workers +
+  Neon Postgres (ap-southeast-1, PG 18). Full smoke suite green against the
+  live URL — see `docs/PRODUCTION_CHECKLIST.md` ("LIVE PRODUCTION").
+- **CI/CD: git → site.** Push to `main` runs GitHub Actions `deploy.yml`
+  (install → `prisma generate` (pg) → `vite build` → `wrangler deploy` →
+  `/api/health` smoke). Verified end-to-end (run 37555920987).
+  `bootstrap-neon.yml` re-provisions the database idempotently; it talks to
+  `console.neon.tech` (`api.neon.tech` no longer resolves) and applies schema
+  over the HTTPS SQL endpoint (`scripts/apply_neon_schema.mjs`), because the
+  Prisma CLI needs IPv6 first and CI runners are IPv4-only.
+- **Three production bugs found and fixed on first deploy** (each verified
+  live):
+  1. Prisma client on workerd: the default `@prisma/client` entry hardwires
+     the native binary engine → "could not locate the Query Engine". New
+     `src/lib/prisma-client.ts` imports the generated WASM entry
+     (`.prisma/client/wasm.js`, wiring `query_engine_bg.wasm`); the
+     `@prisma/client/wasm` exports path is broken in 6.19.3 (missing
+     `wasm.mjs`).
+  2. Worker secrets are not on `process.env` under vinext: `src/lib/db.ts`
+     reads `DATABASE_URL` from `env` on `cloudflare:workers` inside the
+     Workers branch (workerd-safe dynamic import + top-level await; Node
+     paths unchanged).
+  3. `ratelimit.ts` started a `setInterval` at module scope — workerd forbids
+     timers in the global scope ("Disallowed operation called within global
+     scope"). Cleanup timer is now lazy, started inside the first rate-limit
+     check.
+- Ingest duplicate detection made runtime-agnostic (structural P2002 /
+  unique-violation message check instead of `instanceof` across different
+  client runtime classes). Verified live: re-ingest →
+  `{stored: 0, duplicatesSkipped: 2}`.
+- Custom domain `dmarcduck.ansaribilal.com` attached via the Workers Domains
+  API (zone `ansaribilal.com`); workers.dev + observability enabled in
+  `wrangler.jsonc`.
+
 ### Changed — deployment target: Cloudflare Workers via vinext (build verified)
 - **The production build is now vinext** (Cloudflare's Next.js-on-Vite
   runtime; `vite build` → workerd bundle + static assets). `vinext check`

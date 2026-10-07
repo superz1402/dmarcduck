@@ -1,10 +1,40 @@
 # Production Checklist — DmarcDuck
 
-updated: 2026-10-07 (night: vinext/Cloudflare build verified, bundle measured — see the
-new section at the bottom) · previous full review from `next build` + smoke suite (51/51)
-plus screenshot review.
+updated: 2026-10-07 — **LIVE IN PRODUCTION** (Cloudflare Workers + Neon, deployed
+via GitHub Actions; see the first section below) · earlier sections record the
+local verification history (51/51 checks, screenshot review, vinext build).
+
+**Production URL:** https://dmarcduck.ansaribilal1402.workers.dev
 
 Legend: ✅ verified working · 🔶 code done, needs an external account · ⏳ blocked on owner action
+
+## LIVE PRODUCTION 2026-10-07 (real deploy, real smoke)
+
+Deployed by the agent with owner-provided Cloudflare + Neon API keys. Pipeline:
+git push → GitHub Actions (`deploy.yml`: npm ci → prisma generate → vite build →
+wrangler deploy → smoke) → live. Neon bootstrap is `bootstrap-neon.yml`
+(idempotent, workflow_dispatch). Repo secrets: NEON_API_KEY,
+CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CRON_SECRET, DATABASE_URL.
+
+| Check | Status | Evidence (all against the live URL) |
+|---|---|---|
+| Worker deployed | ✅ | `dmarcduck` on account ansaribilal1402; version 972840db+ |
+| Health | ✅ | `/api/health` → 200 `{"status":"ok","checks":{"app":"ok","db":"ok"}}` |
+| Landing / signup / pricing / rua-tool / dashboard | ✅ | all 200 |
+| Signup → session → add domain | ✅ | real rows in Neon production DB |
+| Ingest real report (google fixture) | ✅ | 200 `{stored: 2, event: processed}` |
+| Dedupe on re-ingest | ✅ | 200 `{stored: 0, duplicatesSkipped: 2}` |
+| Junk payload | ✅ | 422 + honest `rejected` ledger event with rejects[] |
+| Cross-domain report refusal | ✅ | 422 + `mismatchSkipped`, not stored |
+| Wrong ingest token | ✅ | 404 |
+| Plan limit paywall | ✅ | 2nd domain → 402 PLAN_LIMIT (enforced server-side) |
+| Cron guard | ✅ | `/api/cron/digest` without secret → 401 |
+| Analyzer + share link | ✅ | analysis JSON + `/r/<id>` → 200 |
+| Rate limiting | ✅/🔶 | 429+Retry-After verified locally; on Workers the limiter is per-isolate (inherent; documented in `src/lib/ratelimit.ts` — needs an edge limiter for cross-isolate enforcement) |
+| Auto-deploy loop | ✅ | fix commit `492e82c` pushed → Actions run 37555920987 → deployed + smoke, `completed success` |
+| Workers logs | ✅ | no exceptions on happy paths (3 production bugs found + fixed: Prisma WASM entry, secrets via `cloudflare:workers`, module-scope timer — see CHANGELOG) |
+| Custom domain | ⏳ | optional; owner can attach `dmarcduck.<domain>` in dash or via API (zones present: ansaribilal.com, convertfilesnow.org, nisasilkfab.com) |
+| Digest emails / billing | 🔶 | unchanged — Resend / Lemon Squeezy accounts still needed |
 
 ## Verified in this environment (production build, real requests)
 

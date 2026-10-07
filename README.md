@@ -2,6 +2,8 @@
 
 **DMARC monitoring that doesn't bite.**
 
+> **Live:** https://dmarcduck.ansaribilal.com · deploys automatically on every push to `main`
+
 Paste a DMARC aggregate report, get a plain-language answer. Free analyzer,
 honest pricing for multi-domain monitoring. Built for small operators —
 indie founders, small agencies, side projects — not enterprises.

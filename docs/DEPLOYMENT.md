@@ -1,5 +1,29 @@
 # Deployment
 
+> ## ✅ DEPLOYED — 2026-10-07
+>
+> **Live at https://dmarcduck.ansaribilal1402.workers.dev**
+>
+> Stack actually running: Cloudflare Workers (vinext) + Neon Postgres
+> (project `purple-base-78747846`, region ap-southeast-1, PG 18), schema pushed
+> (8 tables). Worker secrets `DATABASE_URL` + `CRON_SECRET` are set on the
+> Worker; the repo also mirrors `DATABASE_URL` as an Actions secret.
+>
+> **CI/CD (git → site):** push to `main` → GitHub Actions `deploy.yml`
+> (npm ci → `prisma generate` (pg) → `vite build` → `wrangler deploy` →
+> `/api/health` smoke) → live. Verified end-to-end: run 37555920987.
+> **DB bootstrap:** `bootstrap-neon.yml` (workflow_dispatch, idempotent):
+> create-or-reuse Neon project → push schema → set Worker secrets. Note: it
+> talks to `console.neon.tech` (the `api.neon.tech` host no longer resolves).
+>
+> **Production lessons encoded in code** (all hit live, all fixed — see
+> CHANGELOG): Prisma must come from the generated WASM entry
+> (`src/lib/prisma-client.ts`); Worker secrets live on `env` from
+> `cloudflare:workers`, not `process.env` (`src/lib/db.ts`); no module-scope
+> timers (`src/lib/ratelimit.ts`).
+>
+> The runbook below is kept for re-creating the deployment from zero.
+
 Primary target: **Cloudflare Workers** (vinext build) + **Neon Postgres**
 (free tier). Zero upfront cost. This file is the **owner runbook**: every
 step, every env var, every expected result.
