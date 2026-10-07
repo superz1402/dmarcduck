@@ -95,7 +95,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: echo "$CRON_SECRET" | npx wrangler secret put CRON_SECRET
 
-      - name: Best-effort: mirror DATABASE_URL as a repo secret
+      - name: "Best-effort: mirror DATABASE_URL as a repo secret"
         env:
           GH_TOKEN: ${{ github.token }}
           DATABASE_URL: ${{ steps.uri.outputs.uri }}
