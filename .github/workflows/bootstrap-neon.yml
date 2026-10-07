@@ -1,0 +1,115 @@
+name: Bootstrap Neon database
+
+# One-time (idempotent) production database bootstrap:
+#   1. Create (or reuse) the Neon project named "dmarcduck"
+#   2. Push the canonical Prisma schema to it
+#   3. Store DATABASE_URL + CRON_SECRET as Worker secrets on the deployed
+#      Cloudflare Worker (run deploy.yml first so the Worker exists)
+#
+# Safe to re-run: project lookup by name, schema push is idempotent,
+# secrets are overwritten with the same/current values.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-neon
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Create (or reuse) Neon project
+        id: neon
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          set -euo pipefail
+          existing="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://api.neon.tech/v2/projects" \
+            | python3 -c "import json,sys;print(next((p['id'] for p in json.load(sys.stdin).get('projects',[]) if p['name']=='dmarcduck'),''))")"
+          if [ -n "$existing" ]; then
+            echo "reusing existing Neon project: $existing"
+            project_id="$existing"
+          else
+            echo "creating Neon project dmarcduck..."
+            project_id="$(curl -sS -X POST -H "Authorization: Bearer $NEON_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"project":{"name":"dmarcduck"}}' \
+              "https://api.neon.tech/v2/projects" \
+              | python3 -c "import json,sys;print(json.load(sys.stdin)['project']['id'])")"
+          fi
+          echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve pooled connection URI
+        id: uri
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PROJECT_ID: ${{ steps.neon.outputs.project_id }}
+        run: |
+          set -euo pipefail
+          branches="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches")"
+          branch="$(echo "$branches" | python3 -c "import json,sys;bs=json.load(sys.stdin)['branches'];print(next(b['id'] for b in bs if b.get('primary') or b.get('default')))")"
+          role="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/roles" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['roles'][0]['name'])")"
+          dbname="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/databases" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['databases'][0]['name'])")"
+          uri="$(curl -sS -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://api.neon.tech/v2/projects/$PROJECT_ID/branches/$branch/connection_uri?pooled=true&role_name=$role&database_name=$dbname" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['uri'])")"
+          echo "::add-mask::$uri"
+          echo "uri=$uri" >> "$GITHUB_OUTPUT"
+
+      - name: Push Prisma schema to Neon
+        env:
+          DATABASE_URL: ${{ steps.uri.outputs.uri }}
+        run: |
+          npm ci
+          npx prisma db push --schema prisma/schema.prisma
+
+      - name: Write DATABASE_URL to Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ steps.uri.outputs.uri }}
+        run: echo "$DATABASE_URL" | npx wrangler secret put DATABASE_URL
+
+      - name: Write CRON_SECRET to Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: echo "$CRON_SECRET" | npx wrangler secret put CRON_SECRET
+
+      - name: Best-effort: mirror DATABASE_URL as a repo secret
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATABASE_URL: ${{ steps.uri.outputs.uri }}
+        run: |
+          python3 scripts/set_github_secret.py "DATABASE_URL=$DATABASE_URL" \
+            || echo "WARNING: GITHUB_TOKEN cannot write repo secrets; Worker secret is still set (step above), continuing."
+
+      - name: Summary
+        run: |
+          {
+            echo "## Neon bootstrap complete"
+            echo ""
+            echo "- Project id: \`${{ steps.neon.outputs.project_id }}\`"
+            echo "- Schema pushed (User, Session, Domain, Report, AnalyzeRecord, AlertEvent, Subscription, IngestionEvent)"
+            echo "- DATABASE_URL and CRON_SECRET stored as Worker secrets"
+            echo "- Health check: https://dmarcduck.ansaribilal1402.workers.dev/api/health"
+          } >> "$GITHUB_STEP_SUMMARY"
