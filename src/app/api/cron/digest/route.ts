@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { sendMail } from "@/lib/mail";
 import { log } from "@/lib/log";
 import { planFor } from "@/lib/plan";
+import { digestWindowStart } from "@/lib/digest-window";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -42,9 +43,9 @@ async function handle(req: NextRequest) {
 
     for (const domain of user.domains) {
       const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+      // `recent` (trailing 7 days) drives new-source alert detection below.
+      // Digest volume is computed separately over its own idempotent window.
       const recent = domain.reports.filter((r) => r.seenAt.getTime() >= weekAgo);
-      const volume = recent.reduce((s, r) => s + r.count, 0);
-      const failVolume = recent.filter((r) => r.spf !== "pass" && r.dkim !== "pass").reduce((s, r) => s + r.count, 0);
 
       // New-source alert: an IP we have never stored before this week.
       if (plan.alerts) {
@@ -72,20 +73,53 @@ async function handle(req: NextRequest) {
         }
       }
 
-      if (volume > 0) {
-        const passRate = Math.round(((volume - failVolume) / volume) * 100);
+      // ---- weekly digest (idempotent) ---------------------------------------
+      // The digest covers everything since the last one we ACTUALLY sent,
+      // capped at the trailing 7 days (digestWindowStart). A "weekly_digest"
+      // AlertEvent is written only after sendMail reports success, so:
+      //   - scheduler retries / overlapping runs find no new reports after
+      //     the marker -> volume 0 -> no duplicate email;
+      //   - a failed send writes no marker -> the next run retries naturally.
+      // (Email delivery itself is degraded-but-honest while RESEND_API_KEY is
+      // unset: sendMail returns {sent:false}, so no marker, no false "sent".)
+      const lastDigest = await db.alertEvent.findFirst({
+        where: { domainId: domain.id, type: "weekly_digest" },
+        orderBy: { createdAt: "desc" },
+      });
+      const windowStart = digestWindowStart(
+        lastDigest ? (lastDigest.emailedAt ?? lastDigest.createdAt) : null,
+        new Date()
+      );
+      const digestRecent = domain.reports.filter((r) => r.seenAt.getTime() >= windowStart.getTime());
+      const digestVolume = digestRecent.reduce((s, r) => s + r.count, 0);
+
+      if (digestVolume > 0) {
+        const digestFailVolume = digestRecent
+          .filter((r) => r.spf !== "pass" && r.dkim !== "pass")
+          .reduce((s, r) => s + r.count, 0);
+        const passRate = Math.round(((digestVolume - digestFailVolume) / digestVolume) * 100);
         const lines = [
           `Your week on ${domain.name}:`,
           ``,
-          `${volume} emails reported by providers. ${passRate}% passed DMARC.`,
-          failVolume > 0
-            ? `${failVolume} emails failed — check your dashboard before this becomes spam-folder pain.`
+          `${digestVolume} emails reported by providers. ${passRate}% passed DMARC.`,
+          digestFailVolume > 0
+            ? `${digestFailVolume} emails failed — check your dashboard before this becomes spam-folder pain.`
             : `Everything authenticated cleanly. Consider whether your policy can move past p=none.`,
           ``,
           `— DmarcDuck (because nobody should read raw XML)`,
         ];
         const res = await sendMail({ to: user.email, subject: `[DmarcDuck] Weekly digest: ${domain.name}`, text: lines.join("\n") });
-        if (res.sent) digestsSent += 1;
+        if (res.sent) {
+          digestsSent += 1;
+          await db.alertEvent.create({
+            data: {
+              domainId: domain.id,
+              type: "weekly_digest",
+              payload: JSON.stringify({ volume: digestVolume, since: windowStart.toISOString() }),
+              emailedAt: new Date(),
+            },
+          });
+        }
       }
     }
   }

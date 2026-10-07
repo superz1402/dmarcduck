@@ -86,7 +86,7 @@ model AlertEvent {
   id        String   @id @default(cuid())
   domainId  String
   domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  type      String // new_source | policy_recommendation | spike
+  type      String // new_source | weekly_digest | policy_recommendation | spike
   payload   String
   createdAt DateTime @default(now())
   emailedAt DateTime?

@@ -1,0 +1,37 @@
+name: Weekly digest
+
+# Scheduled digest + alert pass. Calls the EXISTING authenticated endpoint
+# /api/cron/digest (Bearer CRON_SECRET) — no digest logic lives here; the
+# endpoint itself is idempotent (weekly_digest AlertEvent marker written only
+# after a successful send), so retries and overlapping runs never duplicate
+# digests. Docs: docs/DEPLOYMENT.md ("Scheduled digests").
+
+on:
+  schedule:
+    # Mondays 09:17 UTC (off the :00 spike). UTC is fine: the digest window
+    # is data-driven (since the last sent digest), not wall-clock-bound.
+    - cron: "17 9 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digest-production
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger digest pass
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # -f: any non-2xx (auth failure, 5xx) fails the job visibly.
+          # The secret is used as a header value and never echoed.
+          RESP=$(curl -fsS -m 55 -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://dmarcduck.ansaribilal1402.workers.dev/api/cron/digest)
+          echo "digest response: $RESP"

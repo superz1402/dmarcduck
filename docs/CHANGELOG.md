@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Scheduled digest workflow (2026-10-07, session 19)
+
+- **Digests are now scheduled** via `.github/workflows/digest.yml` — Mondays
+  09:17 UTC + `workflow_dispatch`, authenticated POST with `CRON_SECRET`
+  (repo Actions secret) to the existing `/api/cron/digest`. No new digest
+  implementation; the endpoint is the only contract.
+- **Idempotent by construction:** the route now records a successful digest
+  as an `AlertEvent(type="weekly_digest", emailedAt=now)` and computes the
+  digest window as **since the last actually-sent digest, capped at the
+  trailing 7 days** (`src/lib/digest-window.ts`). Retries, overlapping runs
+  and double triggers cannot duplicate a digest (no new data after the
+  marker → volume 0 → no send); failed sends write no marker and retry
+  naturally. Workflow-level `concurrency: digest-production` serializes
+  runs on top.
+- **Tests:** `tests/digest-window.test.ts` (6 boundary tests: no marker,
+  recent/old/exactly-7d marker, future-marker clock-skew clamp, window
+  inclusivity). Suite: 39/39.
+- **Honest state:** without `RESEND_API_KEY` the scheduled run is a green
+  no-op (`digestsSent: 0`, no markers) — digests activate the moment the
+  Resend key is set on the Worker. Free plan remains digest-less by design
+  (`plan.weeklyDigest` is a paid-plan flag).
+
 ### Post-revocation deploy verification (2026-10-07, session 18)
 
 - **Token swap verified end-to-end.** The owner revoked the master Cloudflare

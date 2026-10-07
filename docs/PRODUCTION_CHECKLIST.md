@@ -36,6 +36,7 @@ CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CRON_SECRET, DATABASE_URL.
 | Custom domain | ✅ | `dmarcduck.ansaribilal.com` attached via Workers Domains API (zone ansaribilal.com) — `/api/health` green on it |
 | **Token swap (post-revocation deploy)** | ✅ | owner revoked the master key and set a scoped **Edit Cloudflare Workers** token as the `CLOUDFLARE_API_TOKEN` repo secret; old master token verified dead (401 Invalid API Token); new token verified by deploy run 37558440220 (`workflow_dispatch`, all steps green) + the push-triggered deploy of the smoke-script commit — pipeline intact, no architecture change |
 | **Full smoke suite (repo script)** | ✅ | `scripts/production-smoke.sh` → 22/22 PASS against the live URL (health on both domains, signup/session, domain CRUD, 402 PLAN_LIMIT, ingest+dedupe, mismatch/junk 422, bad token 404, cron 401, analyzer+share, logout destroys session server-side — `me` returns `{user:null}` per design) |
+| **Scheduled digest workflow** | ✅ | `.github/workflows/digest.yml` (Mondays 09:17 UTC + dispatch) → authenticated POST to `/api/cron/digest`; idempotency: `weekly_digest` AlertEvent marker written only on successful send, digest window = since-last-sent capped at 7d (`src/lib/digest-window.ts`, 6 unit tests); verified in production (dispatch ×2 → identical `{digestsSent:0}`, no duplicates — honest no-op until `RESEND_API_KEY` is set) |
 | Digest emails / billing | 🔶 | unchanged — Resend / Lemon Squeezy accounts still needed |
 
 ## Verified in this environment (production build, real requests)

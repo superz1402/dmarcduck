@@ -148,19 +148,36 @@ Run the smoke list from `PRODUCTION_CHECKLIST.md` against the live URL:
 6. 21 rapid analyzer uploads → 429 + `Retry-After`.
 7. `npx wrangler tail` while clicking around → no uncaught exceptions.
 
-### Part 5 — Digest cron
+### Part 5 — Digest cron — DONE via GitHub Actions (2026-10-07)
 
 Workers cron triggers (`"triggers": {"crons": [...]}`) require a
-`scheduled()` handler; vinext routes do not export one yet. Until vinext
-ships first-class cron support, schedule the digest externally:
+`scheduled()` handler; vinext routes do not export one yet. The scheduled
+digest therefore runs as a **GitHub Actions workflow**
+(`.github/workflows/digest.yml`) — the same mechanism that already runs CI:
 
-- Any free scheduler (cron-job.org, GitHub Actions schedule, UptimeRobot
-  ping) hitting:
-  ```
-  GET https://<your-worker>.workers.dev/api/cron/digest
-  Authorization: Bearer <CRON_SECRET>
-  ```
-- Weekly is the intended cadence (the route itself is idempotent).
+- **Cadence:** `17 9 * * 1` (Mondays 09:17 UTC) + `workflow_dispatch` for
+  manual runs. The digest window is data-driven, not wall-clock-bound, so
+  UTC scheduling is fine.
+- **Auth:** POST to `/api/cron/digest` with `Authorization: Bearer
+  $CRON_SECRET` (repo Actions secret; the endpoint compares an HMAC of the
+  provided value against the stored secret, timing-safe). Without the secret
+  the endpoint answers 401.
+- **Idempotency / no duplicate digests:** the endpoint records each
+  successful digest as an `AlertEvent(type="weekly_digest", emailedAt=now)`
+  and only ever emails report volume **since the last actually-sent digest,
+  capped at the trailing 7 days** (`src/lib/digest-window.ts`, unit-tested).
+  A retry, an overlapping run, or an accidental double trigger finds no new
+  data after the marker → volume 0 → no email. A failed send writes no
+  marker, so the next run retries naturally. Workflow-level protection:
+  `concurrency: digest-production` serializes runs.
+- **Honest current state:** `RESEND_API_KEY` is not set yet, so `sendMail`
+  returns `{sent:false}` (logged, not sent) — the workflow runs green with
+  `digestsSent: 0` and no markers are written. The moment the Resend key is
+  set on the Worker (`npx wrangler secret put RESEND_API_KEY`), digests
+  start going out on the next scheduled run with no further changes.
+
+Any other free scheduler (cron-job.org, UptimeRobot ping) hitting the same
+endpoint with the same header also works — the endpoint is the contract.
 
 Honest note: `vercel.json` still declares the Vercel cron for the fallback
 path below; it is inert on Workers.
