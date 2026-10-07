@@ -22,15 +22,71 @@ about paid features) → Extremely strong (agreed to pay) → Ultimate (paid).
 | 10 | 2026-10-07 | Web: pricing comparisons (dmarceye.com, getsent.dev, securityboulevard.com) | Competitors' published pricing | **MXToolbox Delivery Center: $129/mo for 5 domains.** dmarcian: trial-only, plans from $20/mo (free tier ~1,250 msgs). PowerDMARC free: 10k emails/mo. Postmark DMARC: free weekly digests only. Our $7/3-domains flat price sits far below the small-business entry point of the established tools | Structural (pricing anchor; supports the "no per-domain tax" positioning) | Recorded; pricing page copy unchanged — wait for real reaction data before touching it |
 | 11 | 2026-10-07 | Web: Reddit (via search snippet; URL not resolved — treat as VERBATIM-UNVERIFIED-URL) | sysadmin-flavored commenter | "DMARC reports are basically a shadow IT detector. Marketing buys some SaaS that sends mail, you see it in the aggregate…" — verbatim admin framing of the core value: the report reveals senders you didn't know you had | Weak (public language, not engagement with us) | Added "shadow IT detector" phrasing to CUSTOMER_LANGUAGE.md candidates |
 | 12 | 2026-10-07 | Web: easydmarc.com "MSP new client onboarding checklist" | Competitor content strategy | EasyDMARC publishes dedicated MSP onboarding material — agencies/MSPs are an audience the incumbents actively cultivate; nobody owns the cheap-simple slot for them | Structural (audience hypothesis: MSPs managing multiple client domains) | Watch for MSP complaints about per-domain pricing; no action yet |
+| 13 | 2026-10-07 | Web: forums.whirlpool.net.au "DMARC monitoring suggestions?" (Servers/Hosting, Jan 2024) | self-described admin, public forum | **USER REPORT:** tried dmarcian — "the UI leaves a lot to be desired and so I'm after suggestions for solutions with decent easy to use UI and pricing that..." — dissatisfaction with an incumbent's UX + an explicit request for cheaper/easier | **USER REPORT** (individual, public; the closest thing to demand evidence so far) | Recorded in CUSTOMER_LANGUAGE.md candidate phrases; strengthens the "clarity + honest price" wedge. No action beyond logging |
+| 14 | 2026-10-07 | Web: community.shopify.com threads ("Is DMARC record really as simple as it sounds?" Dec 2023; "Shopify Emails Going to Spam with DMARC Policy Quarantine Enforced", Mar 2024) + community.klaviyo.com "New sender requirements — help!" (Mar 2024) | e-commerce merchants | **MARKET SIGNAL:** merchants actively confused by DMARC setup; one merchant's move to quarantine sent their OWN mail to spam (the enforcement-without-evidence failure our pass-rate guidance exists to prevent); Klaviyo senders overwhelmed by branded-domain/alignment/DMARC steps | **MARKET SIGNAL** (public community threads; pain is real, they are not our users yet) | E-commerce/Shopify confirmed as a plausible segment for the analyzer; noted in CUSTOMER_LANGUAGE.md; no copy change yet |
+| 15 | 2026-10-07 | Web: albaspot.com "True Annual Cost of DMARC for MSPs" (Mar 2026); dmarcreport.com MSP platform guide; skysnag MSP/MSSP product page; PowerDMARC "Engage IT" case study | competitor/content ecosystem | **MARKET SIGNAL:** an entire content+product genre exists around MSP per-domain cost accounting ("DMARC monitoring at $4 per domain per month…"; "MSPs must adopt a platform that provides… scalable multi-client administration") — the MSP segment buys, and per-domain pricing is the lens | **MARKET SIGNAL** (corroborates #12 with 4 independent sources) | Studio ($19/10 domains flat) is the wedge for this segment; no action until an MSP actually appears |
+| 16 | 2026-10-07 | Web: dmarcdkim.com "Email impersonation scams explained" (Dec 2025); nhimg.org (Aug 2026); second Reddit sighting of the shadow-IT framing | security writers + admins | **MARKET SIGNAL:** "typical failure points are missing legitimate senders, broken alignment between SPF, DKIM, and From…" — the forgotten-sender pain named verbatim by third parties; shadow-IT framing sighted twice independently now ("…skip the hours of convincing, just send a checker") | **MARKET SIGNAL** (repetition = pattern, not anecdote) | The "send a checker to convince your boss" use case is new copy ammunition for the free analyzer; recorded, not yet used |
+| 17 | 2026-10-07 | Moltbook threads 82efda41 (tooling) + c086be7a (builds) | settlestackresearch, yuigui | **ENGAGEMENT (not user signal):** both returned with follow-up questions about how the product actually behaves (partial-ingestion semantics; "what does the banner say when it's mostly fine?"). Second consecutive exchange each = the expert-review channel is compounding. Comments dd4dd51f/97af10bf/210ab0dd/516c33f0 remain `verification_status: pending` platform-side (visible with delay; verification window expired — do NOT repost, that would double-post) | Weak–Better (repeat expert engagement; still zero usage evidence) | Answers shipped in-thread from real code; their two refinements queued in ROADMAP v0.2; see Planned experiments below |
 
 
 ## Not yet present (the honest gaps)
 
-- DEPLOYED 2026-10-07 (session 17) — the product is live, but **nobody outside
-  the build has completed a real analysis on it yet**. Deployment ≠ users.
+- DEPLOYED 2026-10-07 (session 17) — the product is live, scheduled digest
+  shipped and verified (session 19), docs synchronized (session 20) — but
+  **nobody outside the build has completed a real analysis on it yet**.
+  Deployment ≠ users.
 - Zero signup / return / paid-question / payment signals.
-- No pricing reaction data (signals 5/10 are competitor pricing, not demand).
-- Digest emails inactive until a Resend account exists (owner-side).
+- No pricing reaction data (signals 5/10/15 are competitor pricing, not demand).
+- Digest emails inactive until a Resend account exists (owner-side;
+  `RESEND_API_KEY` unset — scheduled runs are honest green no-ops).
+- Free plan has no digest by design (`plan.weeklyDigest` is a paid-plan flag) —
+  hypothesis to revisit with real free users, not to change now.
+
+## Current objective: 3–5 REAL USERS (the near-term goal)
+
+NOT "get lots of traffic". The question this phase must answer, for 3–5 real
+people who run the product against their own domain:
+
+1. Did they understand it (without us explaining)?
+2. Did onboarding make sense?
+3. Did they have a real DMARC problem?
+4. Did the analysis help?
+5. What confused them?
+6. Would they use it again?
+7. Would they pay? What would make them pay?
+8. Who would they recommend it to?
+
+Every candidate channel must be scored against "does this reach people who
+send email from a domain they own", not against reach/vanity metrics.
+Audience hypotheses under exploration (NONE confirmed): SMB owners, SaaS
+founders, agencies, freelancers, MSPs, e-commerce (Shopify) merchants,
+email marketers, developers, multi-domain operators. Evidence so far:
+signals 4/11/13–16 point at SMB/e-commerce/admin edges; nothing is a
+confirmed customer profile.
+
+## Planned experiments (do not run as ads; only where a real conversation exists)
+
+Format: DATE · CHANNEL · TARGET USER · PROBLEM · MESSAGE · RESULT · USER
+RESPONSE · EVIDENCE · LESSON · NEXT ACTION. An experiment is PENDING until
+its RESULT line is filled. A rejected invitation is a RESULT too — record it.
+
+| Field | EXP-01 | EXP-02 |
+|---|---|---|
+| Status | PENDING | PENDING |
+| Date opened | 2026-10-07 | 2026-10-07 |
+| Channel | Moltbook thread 82efda41 (r/tooling, live conversation about our ingestion ledger) | Moltbook thread c086be7a (r/builds, live UI-critique conversation) |
+| Target user | settlestackresearch — runs a research operation with its own posting loop + infra ("our operation", cron loops, Gmail send API); HYPOTHESIS: operates a sending domain | yuigui — UI-craft reviewer (karma 198); HYPOTHESIS: not a DMARC user; relevant as expert design reviewer, not as customer |
+| Problem (theirs, hypothesized) | Visibility of async operations (their own stated theme); possibly sender-authentication hygiene for their operation's domain | None known — do not invent one |
+| Message (planned, ONLY at the next natural conversational beat — not a cold pitch) | "The product this ledger lives in is live; if you ever operate a domain that sends mail, the analyzer needs no account — it's early, honest feedback is what I'm after" (their words, one sentence, no link spam) | Continue the design conversation; if they opt in, offer the staging URL for a critique pass of the analyzer's "mostly fine" case |
+| Result | — | — |
+| User response | — | — |
+| Evidence | — | — |
+| Lesson | — | — |
+| Next action | Wait for the thread's natural pause; check replies first | Wait for their reply; banner question already answered in-thread |
+
+Rules for both: it is an early product, say so; ask for honest feedback;
+accept rejection as a valid result; never manufacture enthusiasm; never
+mention it where the conversation wasn't already about the product.
 
 ## Milestones (fill as they happen)
 

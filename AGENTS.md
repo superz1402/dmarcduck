@@ -13,8 +13,9 @@ plain-language dashboards for small operators (1–5 domains). It is:
 - **Deterministic.** Parsing, aggregation, storage, alerts. There is NO
   machine-learning anywhere in the product. Do not add an LLM call to any
   request path — the value is predictability and near-zero marginal cost.
-- **Free-tier native.** Must run on Vercel Hobby + Neon free + Resend free.
-  Any dependency that costs money per-request is a bug in the architecture.
+- **Free-tier native.** Runs on Cloudflare Workers free + Neon free + Resend
+  free (Vercel remains a supported fallback target). Any dependency that
+  costs money per-request is a bug in the architecture.
 - **Honest by design.** No fake logos, no inflated numbers, no dark patterns,
   no artificial urgency. The marketing voice is "boring, cheap, correct".
 
@@ -24,11 +25,13 @@ plain-language dashboards for small operators (1–5 domains). It is:
 |---|---|---|
 | Framework | Next.js 15, App Router, TypeScript strict | server routes + UI in one repo |
 | Styling | Tailwind CSS 4 + design tokens in `globals.css` | see `docs/UI_SYSTEM.md` — the tokens are the design system |
-| DB | Prisma; SQLite for dev, Postgres for prod | two schema files; `db:push` (sqlite) / `db:push:pg` |
+| DB | Prisma (`PrismaNeonHTTP` on Workers); SQLite for dev, Neon Postgres for prod | two schema files; `db:push` (sqlite) / `db:push:pg` |
+| Deployment | **Cloudflare Workers via vinext** (`vite build` → `wrangler deploy`) | production since 2026-10-07; Vercel fallback still works — do NOT migrate either direction without a real blocker |
 | Auth | email + bcrypt + DB sessions in httpOnly cookie | no OAuth, no JWT; see `src/lib/auth.ts` |
 | Email | Resend HTTP API behind `RESEND_API_KEY` | unset key = logged, not sent (graceful) |
 | Billing | Lemon Squeezy webhook (`LS_SIGNATURE_SECRET`) | merchant of record; status in Subscription table |
 | Tests | Vitest | parser is the crown jewel; fixtures in `tests/fixtures/` |
+| CI/CD | GitHub Actions | `deploy.yml` (push to main → build → deploy → health smoke), `digest.yml` (weekly digest cron), `bootstrap-neon.yml` (idempotent DB re-provision), `ci.yml` (tests) |
 | Icons | lucide-react | no emoji as UI icons, ever |
 
 ## Non-negotiable rules
@@ -84,8 +87,33 @@ A passing build is not "done". A working flow is done.
 - Plan limits & entitlements: `src/lib/plan.ts` (single source of truth)
 - Analysis shape (the contract between parser and UI): `src/lib/dmarc/analyze.ts`
 - Health scoring (pass rate, policy guidance): `analyzeReports()` — same file
+- Digest idempotency window: `src/lib/digest-window.ts` (unit-tested)
+- Production smoke suite (22 checks): `scripts/production-smoke.sh` — run it
+  against the live URL after every deploy
 - Structured logs: `log.info("event.name", {fields})` — one JSON line
 - Design tokens: `src/app/globals.css` (`:root` + `.dark` blocks)
+
+## Post-launch state (read this before proposing work — 2026-10-07)
+
+DmarcDuck is **live in production and verified**:
+https://dmarcduck.ansaribilal.com (mirror: https://dmarcduck.ansaribil1402.workers.dev).
+Push to `main` auto-deploys. Scheduled digest workflow (`digest.yml`) is live
+and idempotency-verified. Smoke suite 22/22. Tests 39/39.
+
+The product phase is **USER VALIDATION, not infrastructure or feature
+development**. Before building anything, check `docs/VALIDATION_LOG.md`:
+features need user evidence, not taste. Specifically do NOT:
+
+- migrate to D1, Vercel, or any other runtime without a real technical blocker
+  (the current pipeline is proven end-to-end; "interesting" is not a reason);
+- rebuild or parallel-implement anything that exists (digest, smoke, deploy);
+- add infrastructure without a production incident that requires it;
+- break the deployed auth/session/ingest contracts (`/api/auth/me` returns
+  200 `{user:null}` for anonymous callers — that is the documented design).
+
+Known-not-configured (owner-side, do not "fix" in code): `RESEND_API_KEY`
+(no Resend account yet → digest emails log instead of sending) and Lemon
+Squeezy billing (`LS_SIGNATURE_SECRET` unset → webhook 503s honestly).
 
 ## Product judgment
 

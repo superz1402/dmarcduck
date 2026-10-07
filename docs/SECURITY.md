@@ -32,10 +32,16 @@ timing-unsafe signature comparisons (webhook + cron), unhandled webhook JSON
 declaration guard, expired share records never deleted (cron now culls them).
 
 Remaining risks we accept **and document**:
-- `x-forwarded-for` is trusted for rate limiting. Correct on Vercel (platform-
-  set); if self-hosting without a trusted proxy, clients can spoof their IP
-  past IP-keyed limits. Mitigation: front with a proxy that overwrites the
-  header, or move to platform identity (Vercel `x-real-ip`).
+- `x-forwarded-for` is trusted for rate limiting (first hop). On Vercel the
+  platform overwrites it; production now runs on **Cloudflare Workers**,
+  where the edge also sets client-IP headers (`CF-Connecting-IP` is the
+  authoritative one). A client that sends its own `X-Forwarded-For` through
+  Cloudflare can poison the first hop — impact is limited to rate-limit
+  keying (evasion or lockout of a spoofed IP), not auth. Documented fix
+  when evidence of abuse appears (or before charging money): prefer
+  `CF-Connecting-IP` when present, fall back to `x-forwarded-for`. Not
+  changed during the validation phase — no abuse exists yet, and product
+  changes are gated on evidence.
 - Ingestion capability URLs appear in server/proxy logs by design. Rotation
   (remove + re-add a domain) is the documented revocation path.
 - No CSP yet (Next.js inline runtime makes strict CSP non-trivial). Roadmap

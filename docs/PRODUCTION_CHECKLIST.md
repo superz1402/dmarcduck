@@ -82,8 +82,12 @@ CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CRON_SECRET, DATABASE_URL.
 
 ## Deployment — what is ready, what is missing
 
-The app is **deploy-ready code**: Vercel (Hobby) + Neon Postgres (free) +
-Resend (free) + Lemon Squeezy. `vercel.json` carries the weekly cron.
+> **SUPERSEDED 2026-10-07** — kept as history. This was the pre-deploy
+> readiness plan (Vercel-first era). The actual deployment went to
+> **Cloudflare Workers + Neon** the same day; see "LIVE PRODUCTION" at the
+> top and `docs/DEPLOYMENT.md` for the real runbook. Nothing here is still
+> blocked on the owner except Resend (digest email) and Lemon Squeezy
+> (billing) accounts.
 
 **Blocked on owner action only** (no credentials exist in this environment):
 
@@ -135,3 +139,10 @@ Not yet exercised (honest gaps): a real deploy against a real Cloudflare
 account, and a live Neon round-trip from inside the Worker. Both are the
 owner-side steps in `docs/DEPLOYMENT.md` Part 2–4; nothing in this repo is
 expected to change for them.
+
+> **Update 2026-10-07:** both gaps closed the same day — the deploy and the
+> live Neon round-trip happened (see LIVE PRODUCTION above). The "Actual
+> deploy + secrets + custom domain ⏳" row and the "Cron on Workers 🔶" row
+> below are historical: deploy done, custom domain done, cron shipped as the
+> GitHub Actions `digest.yml` workflow (verified). Test suite is now 39/39
+> (parser 15, record 18, digest-window 6).

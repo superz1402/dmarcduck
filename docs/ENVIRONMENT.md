@@ -16,8 +16,9 @@ for the API routes that touch the DB.
 
 | Service | Free tier | Our usage | Ceiling |
 |---|---|---|---|
-| Vercel Hobby | 100GB-hr serverless, 2 cron jobs | web app | fine at launch scale |
+| **Cloudflare Workers (production)** | 100k req/day free | web app + API (vinext) | far above launch scale |
+| Vercel Hobby (fallback target) | 100GB-hr serverless, 2 cron jobs | not used in production; code kept compatible | n/a while on Workers |
 | Neon Postgres | 0.5GB storage, autosuspend | rows are tiny (XML→numbers) | months of reports fit |
-| Resend | 3,000 emails/mo | 1 digest/domain/week + alerts | 100 domains ≈ 500 mails/mo |
-| Lemon Squeezy | $0 fixed | 5%+50¢ per sale | costs scale WITH revenue |
-| GitHub Actions (cron alt.) | 2,000 min/mo private | digest job 1/min-run | trivial |
+| GitHub Actions (CI/CD + digest cron) | 2,000 min/mo private | deploy ~1/min-run, digest 1×/week | trivial |
+| Resend (NOT configured yet — no account exists) | 3,000 emails/mo when set | digests/alerts are logged, not sent, until `RESEND_API_KEY` is set on the Worker | 100 domains ≈ 500 mails/mo |
+| Lemon Squeezy (NOT configured yet) | $0 fixed | 5%+50¢ per sale | costs scale WITH revenue |

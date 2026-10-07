@@ -2,7 +2,12 @@
 
 **DMARC monitoring that doesn't bite.**
 
-> **Live:** https://dmarcduck.ansaribilal.com · deploys automatically on every push to `main`
+> **Live:** https://dmarcduck.ansaribilal.com · mirror: https://dmarcduck.ansaribil1402.workers.dev
+> Deploys automatically on every push to `main` (GitHub Actions → Cloudflare Workers).
+>
+> **Current phase: USER VALIDATION** — the system is deployed and verified;
+> the open question is whether real people use and pay for it. No new
+> infrastructure or features without real-user evidence (see AGENTS.md).
 
 Paste a DMARC aggregate report, get a plain-language answer. Free analyzer,
 honest pricing for multi-domain monitoring. Built for small operators —
@@ -34,13 +39,13 @@ no AI theater (this is a parsing problem, not a language-model problem).
 | Domain registration with private ingestion URL | ✅ |
 | Automated report ingestion endpoint (raw XML or multipart) | ✅ |
 | Per-domain dashboard: sources, verdicts, providers, pass rate | ✅ |
-| Weekly digest + new-source alerts (Resend; logs if unset) | ✅ |
+| Weekly digest + new-source alerts — scheduled via GitHub Actions (`digest.yml`, Mondays 09:17 UTC), idempotent, verified in production | ✅ deployed / 🔶 email not configured (no `RESEND_API_KEY` yet — sends are logged, not sent) |
 | Lemon Squeezy webhook (signature-verified) for upgrades | ✅ code / ⏳ account |
-| Cron wiring for Vercel Cron / GitHub Actions | ✅ code / ⏳ deployment |
-| Guided policy enforcement (p=none → quarantine → reject) | 📋 planned (Studio) |
-| CSV export | 📋 planned (Studio) |
+| Guided policy enforcement (p=none → quarantine → reject) | 📋 planned (Studio) — gated on user evidence |
+| CSV export | 📋 planned (Studio) — gated on user evidence |
 
-Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md).
+Full roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Production state of every
+check: [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md).
 
 ## Quick start (zero-setup dev)
 
@@ -104,13 +109,19 @@ AGENTS.md                 # instructions for AI coding agents
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | daily workflow, code style, DB workflows |
 | [docs/SECURITY.md](docs/SECURITY.md) | threat model, what we store, what we never do |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | staged plan to v1.0 and beyond |
-| [CHANGELOG.md](CHANGELOG.md) | release history |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to develop on this repo |
 
 ## Honest limits
 
-- Rate limiting is in-memory per-instance (fine for one Vercel instance; front
-  with an edge limiter if you scale out).
+- Email delivery is NOT configured in production yet: no Resend account
+  exists, `RESEND_API_KEY` is unset, so digest/alert emails are logged, not
+  sent (`digestsSent: 0` on every scheduled run — honest no-op). Free plan
+  has no digest by design (`plan.weeklyDigest` is a paid-plan flag).
+
+- Rate limiting is in-memory per Workers isolate (documented in
+  `src/lib/ratelimit.ts`; an edge limiter is the upgrade path if limits
+  start being evaded).
 - Ingestion accepts HTTP POSTs; mailbox polling (IMAP) is not built —
   delivery via Cloudflare Email Routing is the documented free path.
 - No dark mode images yet — colors are tokenized and dark mode works, but

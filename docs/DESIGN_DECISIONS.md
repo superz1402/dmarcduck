@@ -43,3 +43,26 @@ complexity, off-by-one bugs, and the read path is fast at this volume).
 Analyzer results can contain infrastructure details (IPs, providers).
 Bounded retention respects privacy and keeps storage honest. Consequence:
 expired links explain themselves and offer a one-click re-run.
+
+## D-008: Deployment target reversed to Cloudflare Workers via vinext (2026-10-07) — supersedes D-004's target choice
+D-004 chose Vercel because the Workers/Prisma story was weaker "at the time".
+It stopped being true: vinext (Cloudflare's Next.js runtime) built all 22
+routes; Prisma's WASM engine + `PrismaNeonHTTP` (HTTPS-only driver) removed
+the TCP/native-engine blockers; the bundle measures ~7% of the 64 MiB limit.
+Production deployed 2026-10-07 (Workers + Neon, custom domain, GitHub Actions
+CI/CD). Why it stayed: the pipeline is verified end-to-end (push → deploy →
+smoke 22/22; scoped-token rotation proven one-step; digest cron verified
+idempotent). Consequence: Vercel remains a compatible fallback, but **do not
+migrate in either direction without a real technical blocker** — the
+migration cost is now pure risk with no user-visible payoff. The codebase
+keeps both targets green from one tree (Node paths + `cloudflare:workers`
+branch in `db.ts`).
+
+## D-009: Product phase = user validation; infrastructure frozen (2026-10-07)
+After the scheduled digest workflow shipped and verified, the owner directive
+made it explicit: the bottleneck is no longer software. Zero real users
+exist. Every unit of effort now goes to evidence (who has the pain, do they
+understand the product, would they pay) instead of features. Consequence:
+new code requires a user-evidence justification in `docs/VALIDATION_LOG.md`;
+new infrastructure requires a production incident; architecture changes
+require a real blocker (see AGENTS.md "Post-launch state").

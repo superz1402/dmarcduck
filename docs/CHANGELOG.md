@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+### Knowledge/state synchronization + validation kickoff (2026-10-07, session 20)
+
+- **No product code changed.** This entry is a documentation synchronization
+  pass after the digest workflow shipped: every state doc was re-checked
+  against the actual repository and live production, and stale claims were
+  corrected.
+- **AGENTS.md**: stack table now states the real deployment target
+  (Cloudflare Workers via vinext + `PrismaNeonHTTP` + Neon; CI/CD workflows
+  listed); new "Post-launch state" section — the phase is USER VALIDATION,
+  with explicit do-nots (no D1/Vercel migration without a real blocker, no
+  parallel implementations, no infra without a production incident, do not
+  break the documented auth contracts) and the known-not-configured list
+  (`RESEND_API_KEY`, `LS_SIGNATURE_SECRET` — owner-side accounts, not code
+  bugs).
+- **README.md**: production status block (live URL + mirror + user-validation
+  phase); digest row corrected to deployed/verified with email explicitly
+  "not configured"; email-delivery honest limit added; CHANGELOG link fixed
+  (was pointing to a nonexistent root file).
+- **PRODUCTION_CHECKLIST.md**: the pre-deploy "Deployment — what is ready"
+  section marked SUPERSEDED (historical Vercel-era plan); a closing note
+  records that the vinext-era gaps (real deploy, live Neon round-trip) and
+  cron row were closed the same day; current suite documented as 39/39.
+- **ENVIRONMENT.md**: free-tier table now leads with Cloudflare Workers
+  (production) vs Vercel (fallback); Resend and Lemon Squeezy rows explicitly
+  marked NOT configured (no accounts exist).
+- **TESTING.md**: 39/39 total, digest-window boundary tests listed; cron
+  endpoint note updated with the production dispatch evidence.
+- **ARCHITECTURE.md**: diagram corrected to Workers (was "Next.js (Vercel)"),
+  scheduler + CI/CD lines added; rate-limit and Prisma trade-offs reflect the
+  Workers reality (per-isolate limiter; HTTPS-only Neon driver).
+- **SECURITY.md**: the `x-forwarded-for` rate-limit-keying note now describes
+  the Workers context (CF-Connecting-IP is authoritative on Cloudflare;
+  first-hop XFF is poisonable — documented one-line fix, deliberately NOT
+  changed during the validation phase since no abuse exists).
+- **DESIGN_DECISIONS.md** (append-only): D-008 records the deployment-target
+  reversal (supersedes D-004's Vercel choice) and D-009 records the phase
+  decision (user validation; infrastructure frozen).
+- **ROADMAP.md**: phase note (v0.2+ gated on validation evidence); the
+  AnalyzeRecord cull marked DONE (shipped via the digest pass); the two
+  community refinements (banner small-volume phrasing, ledger completion
+  trace) recorded as queued-with-receipts.
+- **VALIDATION_LOG.md**: signals #13–17 added (Whirlpool dmarcian-UI
+  complaint = first USER REPORT; Shopify/Klaviyo merchant confusion; MSP
+  cost-content genre; second shadow-IT sighting + "missing legitimate
+  senders" verbatim; Moltbook repeat-engagement status incl. pending comment
+  verification); new "Current objective: 3–5 real users" section; planned
+  experiments EXP-01/EXP-02 (settlestackresearch, yuigui) opened in the
+  DATE/CHANNEL/TARGET/PROBLEM/MESSAGE/RESULT format, both PENDING.
+- **CUSTOMER_LANGUAGE.md**: verbatims from the session-20 search pass added
+  (marked ●); raw search JSON preserved in the brain repo `product-lab/raw/`.
+
 ### Scheduled digest workflow (2026-10-07, session 19)
 
 - **Digests are now scheduled** via `.github/workflows/digest.yml` — Mondays
