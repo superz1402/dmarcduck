@@ -31,6 +31,7 @@ use THEIR words, not ours.
 | dmarctrust | "$24 a month for Basic (2 domains) jumps to $240 a month for Plus (8 domains)" | 10x price for 4x domains — the exact gap our $7/$19 ladder attacks. |
 | Vendr (Red Sift) | "$3,000–$5,000 annually for small deployments (1–5 domains...)" | Enterprise tooling for SMB reality. |
 | G2 reviews | "Users feel that the product is expensive, with limited value for larger organizations and high pricing model pressures" | "Limited value" + "expensive" co-occur — price is only a complaint when value is unclear. Guided compliance is the value answer. |
+| Reddit (snippet, 2026-10-07; URL unresolved) | "DMARC reports are basically a shadow IT detector. Marketing buys some SaaS that sends mail, you see it in the aggregate…" | Admins already TELL US the value story: the report exposes senders the org didn't know it had. Never invent a feature story — mirror theirs: "see every service sending as you". (2026-10-07 MXToolbox anchor: $129/mo for 5 domains makes our $7/3 legible.) |
 
 ## Language rules for our copy (drawn from the above)
 
