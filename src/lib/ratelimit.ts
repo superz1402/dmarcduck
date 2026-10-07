@@ -5,7 +5,24 @@
  */
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
+// Opportunistic cleanup so the map cannot grow unbounded.
+// NOTE: must NOT run at module scope — workerd forbids timers (and any
+// async I/O) in the global scope, and the isolate that evaluates the module
+// is not a request context. Start it lazily on the first rate-limit check,
+// which always happens inside a request handler.
+let cleanupTimer: ReturnType<typeof setInterval> | undefined;
+
+function ensureCleanup(): void {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of buckets) if (v.resetAt < now) buckets.delete(k);
+  }, 60_000);
+  cleanupTimer.unref?.();
+}
+
 export function rateLimit(key: string, limit: number, windowMs: number): { ok: boolean; retryAfterSec: number } {
+  ensureCleanup();
   const now = Date.now();
   const b = buckets.get(key);
   if (!b || b.resetAt < now) {
@@ -18,9 +35,3 @@ export function rateLimit(key: string, limit: number, windowMs: number): { ok: b
   }
   return { ok: true, retryAfterSec: 0 };
 }
-
-// opportunistic cleanup so the map cannot grow unbounded
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of buckets) if (v.resetAt < now) buckets.delete(k);
-}, 60_000).unref?.();

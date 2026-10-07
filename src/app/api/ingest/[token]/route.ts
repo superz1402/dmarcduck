@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { expandUpload, parseUpload, isXmlFile } from "@/lib/dmarc/parser";
 import { log } from "@/lib/log";
@@ -163,7 +162,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
           });
           recordsStored += 1;
         } catch (e) {
-          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          // Duplicate detection must be runtime-agnostic: the client is built
+          // from the WASM runtime (see src/lib/prisma-client.ts), which does
+          // not always surface P2002 as `e.code` on reconstructed errors.
+          // Match the code OR the Postgres unique-violation message.
+          const err = e as { code?: string; message?: string } | null;
+          const isDuplicate =
+            err?.code === "P2002" ||
+            /duplicate key|unique constraint/i.test(err?.message ?? "");
+          if (isDuplicate) {
             // Unique constraint: identical (report, ip, window, count) row already stored.
             duplicatesSkipped += 1;
           } else {
