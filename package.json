@@ -2,11 +2,16 @@
   "name": "dmarcduck",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "DMARC monitoring that doesn't bite. Human-readable DMARC aggregate report analysis for small operators.",
   "scripts": {
-    "dev": "next dev -p 3100",
-    "build": "next build",
-    "start": "next start -p 3100",
+    "dev": "vite dev --port 3100",
+    "dev:next": "next dev -p 3100",
+    "build": "vite build",
+    "build:next": "next build",
+    "start": "vinext start",
+    "start:next": "next start -p 3100",
+    "deploy:cf": "vite build && vinext-cloudflare deploy",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -16,6 +21,8 @@
     "db:push:pg": "prisma db push --schema prisma/schema.prisma && prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@prisma/adapter-neon": "^6.19.0",
     "@prisma/client": "^6.16.2",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
@@ -25,22 +32,39 @@
     "nanoid": "^5.0.9",
     "next": "^15.1.6",
     "next-themes": "^0.4.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.0",
     "@tailwindcss/postcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.5",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vinext/cloudflare": "^1.0.1",
+    "@vitejs/plugin-react": "^6.0.0",
+    "@vitejs/plugin-rsc": "^0.5.34",
     "eslint": "^9.17.0",
     "eslint-config-next": "^15.1.6",
     "prisma": "^6.16.2",
+    "react-server-dom-webpack": "^19.2.6",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vinext": "^1.0.1",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.148.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "@prisma/engines@6.19.3": true,
+    "workerd@1.20261006.1": true,
+    "unrs-resolver@1.12.2": true,
+    "@prisma/client@6.19.3": true,
+    "prisma@6.19.3": true
   }
 }

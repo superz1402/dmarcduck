@@ -2,7 +2,11 @@
 // For zero-setup local dev use prisma/schema.sqlite.prisma (`npm run db:push`).
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // driverAdapters: PrismaClient accepts a driver adapter (e.g. PrismaNeon).
+  // Required for Cloudflare Workers, where there is no native query engine
+  // and no raw TCP — Postgres goes through the Neon serverless HTTP driver.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

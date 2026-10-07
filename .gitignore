@@ -9,3 +9,6 @@ db/*.db-journal
 *.tsbuildinfo
 next-env.d.ts
 coverage/
+dist/
+.wrangler/
+.vinext/

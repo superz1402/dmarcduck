@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Changed — deployment target: Cloudflare Workers via vinext (build verified)
+- **The production build is now vinext** (Cloudflare's Next.js-on-Vite
+  runtime; `vite build` → workerd bundle + static assets). `vinext check`
+  scored the app **97% compatible, 0 issues** before migration; the full
+  build emits all 22 routes (10 pages, 1 layout, 12 route handlers).
+- **Measured Worker bundle: 4,691.44 KiB uncompressed / 1,451 KiB gzip**
+  (wrangler's own dry-run bundler). Composition: 2,447.7 KiB app JS +
+  2,243.8 KiB Prisma WASM query engine. Against Cloudflare's current
+  **64 MiB uncompressed** script limit (the old 3 MiB gzip restriction was
+  removed in September 2026), that is **~7% of the budget** — no size
+  optimization is needed or planned.
+- **Postgres on Workers via Prisma driver adapter**: `PrismaNeonHTTP`
+  (Neon serverless HTTP driver, pure fetch — no raw TCP, no native engine).
+  `prisma/schema.prisma` gained `previewFeatures = ["driverAdapters"]`;
+  `src/lib/db.ts` picks the adapter for every Neon URL and for the Workers
+  runtime, and keeps the plain native-engine client for local SQLite dev.
+- Stack upgrades this required: React/React-DOM 18 → **19.3** (vinext peer;
+  also the documented Next 15 App Router path), `@types/react` 19, Vite 8,
+  Vitest 2 → **5** (33/33 pass), Tailwind wired through **`@tailwindcss/vite`**
+  instead of the PostCSS plugin (the PostCSS route breaks in the
+  cloudflare()-configured `rsc` environment: vite's postcss-import cannot
+  resolve the bare `@import "tailwindcss"` specifier there).
+- New files: `vite.config.ts` (vinext + cloudflare plugin with the required
+  `viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] }`),
+  `wrangler.jsonc` (worker entry, `nodejs_compat`, static assets binding).
+- Scripts: `dev`/`build`/`start` now run vinext (Vite); the Next.js CLI
+  remains as `dev:next`/`build:next`/`start:next`, and `deploy:cf` wraps
+  `vite build && vinext-cloudflare deploy`. Both deploy targets share one
+  source tree; `docs/DEPLOYMENT.md` documents both, Cloudflare first.
+- Local verification for this change: `vite build` clean, `tsc --noEmit`
+  clean, 33/33 tests, `vite dev` serves 200s on `/`, `/pricing`, `/login`,
+  `vinext-cloudflare deploy` pre-flight checks pass (dry-run), wrangler
+  dry-run bundling succeeds from the built worker entry.
+
 ### Added — RFC 7489 §7.1 external RUA authorization checker (guided compliance)
 - New tool page `/tools/dmarc-record` + API `POST /api/tools/rua-check`:
   paste a DMARC record and get the exact authorization TXT records each

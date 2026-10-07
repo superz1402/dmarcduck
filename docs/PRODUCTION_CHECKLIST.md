@@ -1,7 +1,8 @@
 # Production Checklist — DmarcDuck
 
-updated: 2026-10-07 (evening: ledger v2, forwarder detection, §7.1 checker — see below) · verified from a production build (`next build` + `next start`)
-exercised end-to-end by an automated smoke suite (`51/51`) plus screenshot review.
+updated: 2026-10-07 (night: vinext/Cloudflare build verified, bundle measured — see the
+new section at the bottom) · previous full review from `next build` + smoke suite (51/51)
+plus screenshot review.
 
 Legend: ✅ verified working · 🔶 code done, needs an external account · ⏳ blocked on owner action
 
@@ -76,3 +77,28 @@ Exact env contract: `docs/ENVIRONMENT.md`. Step-by-step: `docs/DEPLOYMENT.md`.
 4. Wrong ingest token → 404. Junk payload → 422 with event.
 5. Cron without secret → 401.
 6. Rate-limit check → 429 + Retry-After after 21 rapid uploads.
+
+## vinext / Cloudflare Workers build (verified 2026-10-07 night)
+
+The deploy target changed to Cloudflare Workers (vinext). Everything below was
+executed here, in this environment, before handing the deploy to the owner.
+
+| Check | Status | Evidence |
+|---|---|---|
+| `vinext check` compatibility scan | ✅ | **97% compatible, 0 issues** (14 supported, 1 cosmetic partial: App Router strict-mode note) |
+| vinext production build (`vite build` + cloudflare plugin) | ✅ | clean; all 22 routes emitted (10 pages, 1 layout, 12 route handlers) |
+| **Worker bundle size (uncompressed)** | ✅ | **4,691.44 KiB (≈ 4.58 MiB)** / 1,451.00 KiB gzip — wrangler's own dry-run bundler. Composition: 2,447.7 KiB JS + 2,243.8 KiB Prisma WASM engine. **≈ 7% of the 64 MiB uncompressed limit** (3 MiB gzip restriction removed by Cloudflare Sept 2026 — verified) |
+| Prisma + Neon on Workers | ✅ | `PrismaNeonHTTP` driver adapter embedded (WASM query engine present in bundle; no native engine, no raw TCP); `driverAdapters` preview feature; local SQLite dev path unchanged |
+| Typecheck (strict) | ✅ | `tsc --noEmit` clean after React 18 → 19 upgrade |
+| Test suite | ✅ | 33/33 (parser 15, record 18) under Vitest 5 |
+| Dev server | ✅ | `vite dev` → 200 on `/`, `/pricing`, `/login` |
+| wrangler dry-run bundling | ✅ | bundles the built worker entry end-to-end; upload would be accepted (no size or format errors) |
+| `vinext-cloudflare deploy` pre-flight | ✅ | wrangler config + cloudflare plugin + ISR/cache checks all pass (dry-run) |
+| Next.js fallback build (`build:next`) | ✅ | still clean on React 19 — both targets share one tree |
+| Actual deploy + secrets + custom domain | ⏳ | owner: `wrangler login` → `wrangler secret put …` → `npm run deploy:cf` (runbook: docs/DEPLOYMENT.md) |
+| Cron on Workers | 🔶 | external scheduler hits `/api/cron/digest` with Bearer secret (Workers cron triggers need `scheduled()`; revisit when vinext supports it) |
+
+Not yet exercised (honest gaps): a real deploy against a real Cloudflare
+account, and a live Neon round-trip from inside the Worker. Both are the
+owner-side steps in `docs/DEPLOYMENT.md` Part 2–4; nothing in this repo is
+expected to change for them.

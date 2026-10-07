@@ -1,8 +1,24 @@
 # Deployment
 
-Target: Vercel (free tier) + Neon Postgres (free tier). Zero upfront cost.
-This file is the **owner runbook**: every step, every env var, every expected
-result. If you can create two accounts, you can deploy this app in ~20 minutes.
+Primary target: **Cloudflare Workers** (vinext build) + **Neon Postgres**
+(free tier). Zero upfront cost. This file is the **owner runbook**: every
+step, every env var, every expected result.
+
+Why this stack (verified 2026-10-07):
+
+- The production build is vinext (`vite build` — Next.js API surface on Vite,
+  Cloudflare's own runtime for Next.js apps). All 22 routes build clean.
+- The Worker bundle measures **4,691 KiB uncompressed / 1,451 KiB gzip** —
+  ~7% of Cloudflare's current **64 MiB uncompressed** limit (the old 3 MiB
+  gzip restriction was removed by Cloudflare in September 2026; verified
+  against Cloudflare's own docs/announcements and worker-tooling reports).
+  There is no size pressure to "optimize around" — bundle size is a solved
+  problem for this app.
+- Postgres access uses Prisma's `PrismaNeonHTTP` driver adapter (pure HTTPS
+  via `@neondatabase/serverless`) — no raw TCP, no Hyperdrive, no native
+  engine on the Worker (the WASM query engine is bundled automatically).
+- The previous Vercel + Neon path still works and is kept at the bottom as
+  a fallback — nothing was removed, only the target changed.
 
 ## Owner runbook (exact steps)
 
@@ -12,58 +28,79 @@ result. If you can create two accounts, you can deploy this app in ~20 minutes.
 2. Create a project: name `dmarcduck`, region closest to your users
    (us-east-1 is fine to start). Postgres 16 default is fine.
 3. Open the project dashboard → **Connection Details** → pick the
-   **pooled** connection string → copy it.
-   It looks like:
+   **pooled** connection string → copy it. It looks like:
    ```
    postgresql://<user>:<password>@<ep-name>-pooler.<region>.aws.neon.tech/neondb?sslmode=require
    ```
-4. **Keep this tab open.** The pooled string is what Vercel serverless
-   functions should use (pooled avoids connection exhaustion).
+4. **Keep this tab open.** The Neon HTTP driver works with the pooled
+   endpoint; it does not hold connections open, so there is nothing to
+   exhaust.
 
 Expected state: one project, one connection string copied.
 
-### Part 2 — Vercel (~10 min)
+### Part 2 — Cloudflare Workers (~10 min)
 
-1. Sign up at **vercel.com** with the GitHub account that owns
-   `superz1402/dmarcduck` (import is one click).
-2. **Add New → Project** → Import the `dmarcduck` repository.
-3. Framework preset: **Next.js** (auto-detected). Build command, output
-   and install defaults need no changes.
-4. Before clicking Deploy, open **Environment Variables** and add:
+1. Sign up at **dash.cloudflare.com** (free plan is enough).
+2. From your machine:
 
-   | Name | Value | Required | Notes |
-   |---|---|---|---|
-   | `DATABASE_URL` | the Neon **pooled** connection string | **yes** | app will not start without it |
-   | `CRON_SECRET` | any long random string (`openssl rand -hex 32`) | **yes for cron** | guards `/api/cron/digest`; Vercel Cron sends it automatically |
-   | `RESEND_API_KEY` | from resend.com (later) | no | unset = digest emails are logged, not sent; everything else works |
-   | `MAIL_FROM` | e.g. `DmarcDuck <reports@yourdomain.com>` | no | must be a Resend-verified sender domain |
-   | `LS_SIGNATURE_SECRET` | from Lemon Squeezy (later) | no | billing webhook HMAC; leave unset until billing goes live |
+   ```bash
+   git clone https://github.com/superz1402/dmarcduck && cd dmarcduck
+   npm install
+   npx wrangler login          # opens a browser, one click to authorize
+   ```
 
-   Add each to **Production, Preview, and Development**.
-5. Click **Deploy**. First build takes ~2 minutes.
+3. Sanity-check the build locally (optional but recommended):
 
-Expected result: deployment succeeds; visiting the URL shows the landing
-page; `https://<your-app>.vercel.app/api/health` returns
-`{"status":"ok","checks":{"app":"ok","db":"ok"}}`.
+   ```bash
+   npm run build               # vite build → dist/ (worker + static assets)
+   npm test                    # 33/33
+   ```
 
-If health says `db: fail`, the connection string is wrong or the DB schema
-is not pushed yet — do Part 3.
+4. Set the secrets (wrangler prompts for values; secrets are per-Worker,
+   encrypted, never in git):
 
-### Part 3 — Database schema (~2 min, from your machine)
+   ```bash
+   npx wrangler secret put DATABASE_URL      # paste the Neon POOLED string
+   npx wrangler secret put CRON_SECRET       # openssl rand -hex 32
+   # optional, only when those features go live:
+   # npx wrangler secret put RESEND_API_KEY
+   # npx wrangler secret put MAIL_FROM
+   # npx wrangler secret put LS_SIGNATURE_SECRET
+   ```
+
+   | Secret | Required | Notes |
+   |---|---|---|
+   | `DATABASE_URL` | **yes** | Neon **pooled** connection string (`postgres://…`) |
+   | `CRON_SECRET` | **yes for digest cron** | guards `/api/cron/digest` |
+   | `RESEND_API_KEY` | no | unset = digest emails are logged, not sent |
+   | `MAIL_FROM` | no | must be a Resend-verified sender domain |
+   | `LS_SIGNATURE_SECRET` | no | Lemon Squeezy webhook HMAC; when billing goes live |
+
+5. Deploy:
+
+   ```bash
+   npm run deploy:cf           # = vite build && vinext-cloudflare deploy
+   ```
+
+   First deploy prints the workers.dev URL, e.g.
+   `https://dmarcduck.<your-subdomain>.workers.dev`.
+
+Expected result: visiting the URL shows the landing page;
+`/api/health` returns `{"status":"ok","checks":{"app":"ok","db":"ok"}}`.
+
+If health says `db: fail`, the schema is not pushed yet — do Part 3, then
+re-check. If deploy itself fails with an auth error, re-run
+`npx wrangler login`.
+
+### Part 3 — Database schema (~2 min, same machine)
 
 ```bash
-git clone https://github.com/superz1402/dmarcduck && cd dmarcduck
-npm install
 DATABASE_URL="<neon pooled url>" npm run db:push:pg
 ```
 
 Expected result: Prisma applies the schema (tables: User, Session, Domain,
 Report, AnalyzeRecord, AlertEvent, Subscription, IngestionEvent), then
 re-check `/api/health` → `db: ok`.
-
-Alternative with zero local setup: add a temporary GitHub Action that runs
-the same command with the secret stored in repo settings — ask, and the
-workflow file will be provided.
 
 ### Part 4 — Post-deploy verification (~5 min)
 
@@ -77,30 +114,46 @@ Run the smoke list from `PRODUCTION_CHECKLIST.md` against the live URL:
 4. Wrong ingest token → 404. Junk payload → 422 with a ledger event.
 5. `/api/cron/digest` without secret → 401.
 6. 21 rapid analyzer uploads → 429 + `Retry-After`.
+7. `npx wrangler tail` while clicking around → no uncaught exceptions.
 
-### Part 5 — Cron (2 min)
+### Part 5 — Digest cron
 
-`vercel.json` already declares the weekly cron. On Vercel Hobby, crons run
-automatically once the project is deployed; `CRON_SECRET` is passed through
-by Vercel Cron as `Authorization: Bearer`.
+Workers cron triggers (`"triggers": {"crons": [...]}`) require a
+`scheduled()` handler; vinext routes do not export one yet. Until vinext
+ships first-class cron support, schedule the digest externally:
+
+- Any free scheduler (cron-job.org, GitHub Actions schedule, UptimeRobot
+  ping) hitting:
+  ```
+  GET https://<your-worker>.workers.dev/api/cron/digest
+  Authorization: Bearer <CRON_SECRET>
+  ```
+- Weekly is the intended cadence (the route itself is idempotent).
+
+Honest note: `vercel.json` still declares the Vercel cron for the fallback
+path below; it is inert on Workers.
 
 ### Part 6 — Optional integrations (only when needed)
 
 - **Email digests/alerts** (Resend): verify your sending domain → set
-  `RESEND_API_KEY` + `MAIL_FROM` → redeploy. Free tier: 3,000 mails/mo.
+  `RESEND_API_KEY` + `MAIL_FROM` secrets → redeploy. Free tier: 3,000 mails/mo.
 - **Billing** (Lemon Squeezy): create the store, add Starter ($7) and
   Studio ($19) products, point the webhook at
-  `https://<your-app>/api/webhooks/lemonsqueezy`, copy the signing secret
-  into `LS_SIGNATURE_SECRET`, redeploy. Checkout links carry
+  `https://<your-worker>.workers.dev/api/webhooks/lemonsqueezy`, copy the
+  signing secret into `LS_SIGNATURE_SECRET`, redeploy. Checkout links carry
   `custom_data.email` so the webhook can match the account.
-- **Custom domain**: add `dmarcduck.<yourdomain>` in Vercel → Project →
-  Domains; DNS CNAME is shown there.
+- **Custom domain**: Cloudflare dashboard → Workers → dmarcduck →
+  Domains → add `dmarcduck.<yourdomain>` (DNS is in the same account, so
+  this is one click if the zone is already on Cloudflare).
 
 ## What the owner does NOT need to do
 
-- No Vercel config beyond env vars (vercel.json is committed).
+- No Cloudflare config beyond `wrangler login` + secrets (`wrangler.jsonc`
+  and `vite.config.ts` are committed; the deploy command builds everything).
+- No Hyperdrive, no D1, no R2, no KV — the Neon HTTP driver needs nothing
+  but outbound HTTPS, which Workers allow by default.
 - No migration step beyond Part 3 (schema push; no migration history yet).
-- No Docker, no Redis, no queue. Postgres + serverless only.
+- No Docker, no Redis, no queue. Postgres + Worker only.
 
 ## Cloudflare Email Routing recipe (free report delivery)
 
@@ -114,7 +167,7 @@ export default {
   async email(message, env, ctx) {
     // Forward the RAW message bytes to DmarcDuck with the domain token.
     const token = env[`TOKEN_${message.to.split("@")[0]}`]; // map address->token
-    const res = await fetch(`${env.DMARCduck_URL}/api/ingest/${token}`, {
+    const res = await fetch(`${env.DMARC_DUCK_URL}/api/ingest/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/xml" },
       body: message.raw,
@@ -128,21 +181,13 @@ export default {
 
 (The worker code ships in `examples/` too — kept short here on purpose.)
 
-## Monitoring our own deployment
+---
 
-- `/api/health` is the uptime probe (app + db checks).
-- Structured JSON logs stream to `vercel logs`; alert on
-  `mail.provider_error` / `analyze.store_error` rates if you add a
-  log drain.
+## Fallback: Vercel + Neon (still supported)
 
-## Backups
-
-Neon free tier has point-in-time restore within its retention window. At
-paid scale: nightly `pg_dump` to object storage (documented, not needed yet).
-
-## Schema note (added 2026-10-07)
-
-The current schema includes `Report.eventId` (ingestion-event attribution),
-`Report.envelopeFrom`, `Report.dkimAuth`, `Report.reasons`. If you pushed
-the schema before 2026-10-07, re-run `npm run db:push:pg` — Prisma will add
-the new nullable columns and the `eventId` index non-destructively.
+If Cloudflare is unavailable for any reason, the previous runbook works
+unchanged: import the repo on Vercel (Framework preset: Next.js), add the
+same env vars from the table above as project environment variables, deploy,
+then push the schema with `npm run db:push:pg`. `vercel.json` (headers +
+cron) is still committed. The codebase supports both targets from the same
+branch — local dev and tests run identically under either.
