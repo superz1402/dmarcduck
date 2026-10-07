@@ -2,7 +2,8 @@
 
 > ## ✅ DEPLOYED — 2026-10-07
 >
-> **Live at https://dmarcduck.ansaribilal1402.workers.dev**
+> **Live at https://dmarcduck.ansaribilal1402.workers.dev** (also
+> https://dmarcduck.ansaribilal.com)
 >
 > Stack actually running: Cloudflare Workers (vinext) + Neon Postgres
 > (project `purple-base-78747846`, region ap-southeast-1, PG 18), schema pushed
@@ -12,6 +13,13 @@
 > **CI/CD (git → site):** push to `main` → GitHub Actions `deploy.yml`
 > (npm ci → `prisma generate` (pg) → `vite build` → `wrangler deploy` →
 > `/api/health` smoke) → live. Verified end-to-end: run 37555920987.
+> **Token lifecycle (2026-10-07):** the original owner-provided master key was
+> revoked; the repo secret `CLOUDFLARE_API_TOKEN` now holds a scoped
+> **Edit Cloudflare Workers** template token (set by the owner in the GitHub
+> dashboard — one step). Verified post-swap: deploy run 37558440220 (all steps
+> green) + a push-triggered deploy; full `scripts/production-smoke.sh` suite
+> 22/22 against the live URL. When this token eventually expires, the same
+> one-step swap applies.
 > **DB bootstrap:** `bootstrap-neon.yml` (workflow_dispatch, idempotent):
 > create-or-reuse Neon project → push schema → set Worker secrets. Note: it
 > talks to `console.neon.tech` (the `api.neon.tech` host no longer resolves).

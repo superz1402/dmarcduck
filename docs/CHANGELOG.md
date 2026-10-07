@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Post-revocation deploy verification (2026-10-07, session 18)
+
+- **Token swap verified end-to-end.** The owner revoked the master Cloudflare
+  key (confirmed dead: `401 Invalid API Token`) and set a scoped
+  **Edit Cloudflare Workers** token as the `CLOUDFLARE_API_TOKEN` repo secret.
+  Deploy run 37558440220 (`workflow_dispatch`) + a push-triggered deploy both
+  green with it — the git → Actions → Workers pipeline needs nothing else.
+  No architecture change.
+- **`scripts/production-smoke.sh`** — the ad-hoc deploy smoke suite is now a
+  repo script (22 checks: health on both domains, auth/session, domain CRUD +
+  402 paywall, ingest + dedupe + honest 422s, cron guard, analyzer/share,
+  logout server-side invalidation). One finding while writing it, kept as
+  design: `/api/auth/me` returns 200 `{user:null}` for anonymous callers by
+  explicit contract; logout destroys the session row AND clears the cookie
+  (verified by replaying the original cookie → `{user:null}`).
+
 ### Deployed — live in production (2026-10-07)
 
 - **DmarcDuck is live**: https://dmarcduck.ansaribilal.com

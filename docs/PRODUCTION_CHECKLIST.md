@@ -33,7 +33,9 @@ CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CRON_SECRET, DATABASE_URL.
 | Rate limiting | ✅/🔶 | 429+Retry-After verified locally; on Workers the limiter is per-isolate (inherent; documented in `src/lib/ratelimit.ts` — needs an edge limiter for cross-isolate enforcement) |
 | Auto-deploy loop | ✅ | fix commit `492e82c` pushed → Actions run 37555920987 → deployed + smoke, `completed success` |
 | Workers logs | ✅ | no exceptions on happy paths (3 production bugs found + fixed: Prisma WASM entry, secrets via `cloudflare:workers`, module-scope timer — see CHANGELOG) |
-| Custom domain | ⏳ | optional; owner can attach `dmarcduck.<domain>` in dash or via API (zones present: ansaribilal.com, convertfilesnow.org, nisasilkfab.com) |
+| Custom domain | ✅ | `dmarcduck.ansaribilal.com` attached via Workers Domains API (zone ansaribilal.com) — `/api/health` green on it |
+| **Token swap (post-revocation deploy)** | ✅ | owner revoked the master key and set a scoped **Edit Cloudflare Workers** token as the `CLOUDFLARE_API_TOKEN` repo secret; old master token verified dead (401 Invalid API Token); new token verified by deploy run 37558440220 (`workflow_dispatch`, all steps green) + the push-triggered deploy of the smoke-script commit — pipeline intact, no architecture change |
+| **Full smoke suite (repo script)** | ✅ | `scripts/production-smoke.sh` → 22/22 PASS against the live URL (health on both domains, signup/session, domain CRUD, 402 PLAN_LIMIT, ingest+dedupe, mismatch/junk 422, bad token 404, cron 401, analyzer+share, logout destroys session server-side — `me` returns `{user:null}` per design) |
 | Digest emails / billing | 🔶 | unchanged — Resend / Lemon Squeezy accounts still needed |
 
 ## Verified in this environment (production build, real requests)
