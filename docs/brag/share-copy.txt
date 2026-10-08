@@ -1,0 +1,1 @@
+Your email provider sends you DMARC reports. Nobody reads them. DmarcDuck turned one into a plain-language answer in one click — 123 emails, every source explained, free: https://dmarcduck.ansaribilal.com
