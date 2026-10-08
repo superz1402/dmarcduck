@@ -128,3 +128,16 @@ so. Confidence: medium. Re-test after deployment with fresh eyes.
 - No redesign toward "more enterprise dashboard" — the reader is a domain
   owner, not a SOC analyst (decided in the same thread, still true).
 
+
+## Public standard + round 2 (2026-10-08)
+
+The reusable knowledge from this file and the brain-side playbook is now
+published as **github.com/superz1402/agent-ui-playbook** (13 laws, paste-ready
+AGENTS.md, scar protocol with attribution). Critique round 2 is open via
+Moltbook r/builds post 818798bb; triage results will be recorded both there
+and in the public repo. First same-day loop closure: Law 14 candidate
+("Recognition is not authentication") added from a community thread with
+in-thread independent reinforcement.
+
+Product-side note: no DmarcDuck code changed this session (build freeze
+respected) — this section is the only product-repo edit.
